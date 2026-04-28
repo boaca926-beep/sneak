@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  snake-game:
+    build: .
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ENABLE_DEBUG=${ENABLE_DEBUG}
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    ports:
+      - "5678:5678"
+    stdin_open: true
+    tty: true

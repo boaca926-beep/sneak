@@ -230,7 +230,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install ipython debugpy
 
 # Copy game code
-COPY main.py .
+COPY snake.py .
 
 # Copy entrypoint
 COPY scripts/entrypoint.sh /usr/local/bin/
@@ -322,8 +322,12 @@ scripts/
 ## 7. Usage Commands
 ```bash
 # Normal development (with GUI on Linux)
+
+# Allow Docker containers to access your X11 display
+xhost +local:docker
+
 export DISPLAY=$DISPLAY
-docker compose up
+docker-compose up
 
 # Without GUI (headless test)
 docker compose run --rm snake-game python main.py
@@ -336,4 +340,7 @@ docker compose up --build
 
 # Stop everything
 docker compose down
+
+# Quich run docker with rebuild option
+./run --rebuild # if requirements.txt and scripts/entrypoint.sh are changed
 ```
