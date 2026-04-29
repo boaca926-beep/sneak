@@ -432,3 +432,61 @@ import os
 leaderboard_url = f"file://{os.path.abspath('leaderboard.html')}"
 webbrowser.open(leaderboard_url)
 ```
+
+```bash
+How to evolve this project toward data engineering
+
+    Replace SQLite with PostgreSQL (or use both).
+
+        Add Docker Compose service for Postgres.
+
+        Show you can connect to a production‑grade database.
+
+    Add a data pipeline
+
+        Every time a score is submitted, also write to a raw log table.
+
+        Create a scheduled job (e.g., inside the API) that aggregates daily top scores into a summary table (leaderboard snapshot).
+
+    Implement a simple ETL script
+
+        Export scores to a CSV/Parquet file.
+
+        Or load them into a second database for analytics.
+
+    Use environment‑aware config
+
+        Already partially done – expand to load different configs for dev/prod.
+
+    Add metrics / monitoring
+
+        Track number of scores per hour, average score, etc. Expose via a new /stats endpoint.
+
+    Containerize with Airflow (complex but impressive)
+
+        Create a DAG that runs the deduplication SQL every hour instead of at game start.
+
+    Push to a cloud storage
+
+        After the game is closed, automatically upload scores.db to S3 or Google Cloud Storage.
+```
+
+## For Data Engineer
+```bash
+- ETL pipeline that ingests a public dataset (e.g., weather or stock data) into PostgreSQL, cleans it, and exposes via API.
+
+- Use Airflow (Dockerised) to schedule the pipeline.
+
+- Write data to Parquet and AWS S3 (free tier).
+```
+
+## For ML/AI Engineer
+```bash
+For ML / AI Engineer
+
+- Deploy a pre‑trained model (e.g., Hugging Face sentiment analysis) as a REST API with Docker.
+
+- Add the RL Snake as described earlier – train an agent to play.
+
+- Create a model retraining pipeline (trigger retraining when new scores arrive).
+```
