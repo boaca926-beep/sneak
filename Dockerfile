@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Install pygame and X11 dependencies (using correct package names)
+# Install system dependencies for pygame & X11
 RUN apt-get update && apt-get install -y \
     libsdl2-2.0-0 \
     libsdl2-image-2.0-0 \
@@ -23,10 +23,14 @@ RUN apt-get update && apt-get install -y \
 ENV LIBGL_ALWAYS_SOFTWARE=1
 ENV SDL_VIDEODRIVER=x11
 
-# Install pygame
-RUN pip install pygame
-
+# Set working directory first
 WORKDIR /app
+
+# Copy requirements and install (better layer caching)
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy the rest of the application
 COPY . /app
 
 CMD ["python3", "snake.py"]

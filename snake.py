@@ -2,10 +2,13 @@
 # from time import sleep
 
 from cmd import PROMPT
+from urllib import response
 
+from flask import request
 import pygame
 import random
 import sys
+import requests
 
 # Initialize Pygame
 pygame.init()
@@ -64,9 +67,9 @@ def draw_snake(screen, snake):
         rect = pygame.Rect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
         pygame.draw.rect(screen, GREEN, rect)
         pygame.draw.rect(screen, DARK_GREEN, rect, 2)  # border
-        print(
-            f"rec. coord: {segment[0] * CELL_SIZE}, {segment[1] * CELL_SIZE}, {CELL_SIZE}, {CELL_SIZE}"
-        )
+        # print(
+        #    f"rec. coord: {segment[0] * CELL_SIZE}, {segment[1] * CELL_SIZE}, {CELL_SIZE}, {CELL_SIZE}"
+        # )
 
 
 def draw_food(screen, food):
@@ -303,6 +306,20 @@ def main():
 
         if game_over:
             show_game_over(screen, font, score, player_name)
+
+            # Send the score
+            r"""
+            try:
+                response = requests.post("", json={"player_naeme": player_name, "score": score})
+                if response.status_code == 201:
+                    print("Score saved!")
+            except Exception as e:
+                print(f"Could not save score: {e}")
+
+            top = requests.get("http://localhost:5000/top-scores").json()
+            for entry in top:
+                print(f"{entry['player_name']}: {entry['score']}")
+            """
 
         pygame.display.flip()  # Update display
         clock.tick(FPS)  # Control game speed

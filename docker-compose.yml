@@ -14,3 +14,12 @@ services:
     network_mode: host
     stdin_open: true
     tty: true
+
+  score-api:
+    build: .
+    command: python score_api.py
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app          # live code reload
+    # network_mode: bridge (default, no need to specify)

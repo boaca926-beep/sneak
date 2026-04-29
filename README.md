@@ -202,3 +202,92 @@ FPS = 10  # Higher = faster, Lower = slower
 # Solution: Use software rendering
 export LIBGL_ALWAYS_SOFTWARE=1
 ```
+
+## Flask API with SQLite that stores the highest scores and allows retrieval of the top 10.
+```python
+import sqlite3
+from datetime import datetime
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+DATABASE = "scores.db"
+
+def init_db():
+    """Create the scores table if it doesn't exist."""
+    with sqlite3.connect(DATABASE) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_name TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        """)
+        # Index for faster top‑score queries
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_score ON scores(score DESC)")
+
+@app.route("/score", methods=["POST"])
+def add_score():
+    """
+    Expects JSON: {"player_name": "Alice", "score": 123}
+    Stores the score in the database.
+    """
+    data = request.get_json()
+    if not data or "player_name" not in data or "score" not in data:
+        return jsonify({"error": "Missing player_name or score"}), 400
+
+    player_name = data["player_name"][:50]          # limit length
+    score = data["score"]
+    timestamp = datetime.utcnow().isoformat()
+
+    with sqlite3.connect(DATABASE) as conn:
+        conn.execute(
+            "INSERT INTO scores (player_name, score, timestamp) VALUES (?, ?, ?)",
+            (player_name, score, timestamp)
+        )
+    return jsonify({"message": "Score saved"}), 201
+
+@app.route("/top-scores", methods=["GET"])
+def get_top_scores():
+    """Return the top 10 highest scores."""
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.execute(
+            "SELECT player_name, score, timestamp FROM scores ORDER BY score DESC LIMIT 10"
+        )
+        rows = cursor.fetchall()
+    top_scores = [
+        {"player_name": row[0], "score": row[1], "timestamp": row[2]} for row in rows
+    ]
+    return jsonify(top_scores)
+
+@app.route("/scores", methods=["GET"])
+def get_all_scores():
+    """(Optional) Return all scores, newest first."""
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.execute(
+            "SELECT player_name, score, timestamp FROM scores ORDER BY timestamp DESC"
+        )
+        rows = cursor.fetchall()
+    all_scores = [
+        {"player_name": row[0], "score": row[1], "timestamp": row[2]} for row in rows
+    ]
+    return jsonify(all_scores)
+
+if __name__ == "__main__":
+    init_db()
+    app.run(host="0.0.0.0", port=5000, debug=True)
+```
+### Run the API
+```bash
+python score_api.py
+
+# Add a score
+curl -X POST http://localhost:5000/score \
+  -H "Content-Type: application/json" \
+  -d '{"player_name":"Bo","score":350}'
+
+# Get top 10 scores
+curl http://localhost:5000/top-scores
+```
+
+## Run as a Background Service
