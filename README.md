@@ -282,9 +282,9 @@ if __name__ == "__main__":
 python score_api.py
 
 # Add a score
-curl -X POST http://localhost:5000/score \
-  -H "Content-Type: application/json" \
-  -d '{"player_name":"Bo","score":350}'
+#curl -X POST http://localhost:5000/score \
+#  -H "Content-Type: application/json" \
+#  -d '{"player_name":"Bo","score":350}'
 
 # Get top 10 scores
 curl http://localhost:5000/top-scores
@@ -469,6 +469,33 @@ How to evolve this project toward data engineering
     Push to a cloud storage
 
         After the game is closed, automatically upload scores.db to S3 or Google Cloud Storage.
+```
+## Add a Desktop short-cut with icon
+```bash
+# Add bash script /home/bo/.local/share/applications/snake-game.desktop
+# Change ownership: chmod +x snake-game.deskop
+Version=1.0
+Name=Snake Game
+Comment=Play the Snake Game in a Docker container
+Exec=gnome-terminal --working-directory=/home/bo/Desktop/sneak -- bash -c "./run.sh; echo 'Press Enter to exit...'; read"
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Game;
+StartupNotify=true
+```
+
+**Add snake-game.desktop**
+```bash
+Name=Snake Game
+Comment=Play the Snake Game in a Docker container
+Exec=gnome-terminal -- bash -c "cd /home/bo/Desktop/sneak && export LIBGL_ALWAYS_SOFTWARE=1 && export SDL_VIDEODRIVER=x11 && ./run.sh; echo 'Game closed. Press Enter to exit...'; read"
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Game;
+StartupNotify=true
+Icon=/home/bo/.local/share/icons/snake-icon.png
 ```
 
 ## For Data Engineer

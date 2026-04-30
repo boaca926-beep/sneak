@@ -9,3 +9,4 @@ README.md
 *.log
 .DS_Store
 *.db
+run.sh

@@ -76,12 +76,12 @@ xhost +local:docker
 export DISPLAY=$DISPLAY
 
 # 5. Start both services (snake-game + score-api)
-docker-compose up $REBUILD
+docker compose up $REBUILD
 
 # 6. Cleanup after game closes (Ctrl+C or exit)
 echo -e "${YELLOW}Cleaning up...${NC}"
 xhost -local:docker
-docker-compose down
+docker compose down
 
 echo -e "${GREEN}Game closed!${NC}"
 
