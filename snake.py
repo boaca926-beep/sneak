@@ -266,7 +266,7 @@ def main():
 
             # Calculaion new head position
             head_x, head_y = snake[0]
-            print(f"head: (x, y) = ({head_x}, {head_y})")
+            # print(f"head: (x, y) = ({head_x}, {head_y})")
             dx, dy = direction
             # print(f"(dx, dy) = ({dx}, {dy})")
             new_head = (head_x + dx, head_y + dy)
@@ -276,7 +276,7 @@ def main():
             ate_food = new_head == food
             # print(f"ate_food: {ate_food}")
 
-            print(food)
+            # print(food)
 
             # Perform movement
             if ate_food:
