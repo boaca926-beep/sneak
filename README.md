@@ -24,6 +24,7 @@ A classic Snake game built with Python and Pygame. Control a snake, eat food to 
 | ⬇️ Down Arrow | Move snake down |
 | ⬅️ Left Arrow | Move snake left |
 | ➡️ Right Arrow | Move snake right |
+| **P** / **Any Key** | Pause the game / Resume the game|
 | **R** | Restart game (after game over) |
 | **Q** | Quit game |
 
@@ -136,12 +137,17 @@ snake-game/
 ├── snake.py              # Main game implementation
 ├── score_api.py          # Flask API + SQLite leaderboard
 ├── leaderboard.html      # Auto‑refreshing web leaderboard
+├── my_game.py            # Legacy/alternative game entry point
 ├── docker-compose.yml    # Docker orchestration
-├── run.sh                # Quick start script
+├── Dockerfile            # Docker image definition
+├── run.sh                # Quick start script (with Docker & API)
 ├── inspect_db.sh         # SQLite inspection helper
-├── requirements.txt      # Python dependencies
-├── pyproject.toml        # Project metadata
-└── README.md             # This file
+├── requirements.txt      # Python dependencies (pip)
+├── pyproject.toml        # Project metadata (PEP 621)
+├── uv.lock               # uv package manager lock file
+├── scores.db             # SQLite database (created at runtime)
+├── figures/              # Screenshots for README (game_end.png, etc.)
+└── scripts/              # Additional helper scripts (if any)
 ```
 
 ## Customization Options
