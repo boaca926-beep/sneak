@@ -87,6 +87,13 @@ def get_all_scores():
     return jsonify(all_scores)
 
 
+@app.route("/leaderboard")
+def leaderboard():
+    from flask import send_file
+
+    return send_file("leaderboard.html")
+
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)

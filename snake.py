@@ -3,6 +3,8 @@
 
 from cmd import PROMPT
 from urllib import response
+import webbrowser
+import os
 
 from flask import request
 import pygame
@@ -217,6 +219,17 @@ def main():
 
     # Get player name
     player_name = get_player_name(screen, font)
+
+    # Webbrowser – gracefully handle absence
+    leaderboard_url = "http://localhost:5000/leaderboard"
+    try:
+        # Only attempt if DISPLAY is set (X11 available for pygame)
+        if os.environ.get("DISPLAY"):
+            webbrowser.open(leaderboard_url)
+        else:
+            print("No DISPLAY set – skipping automatic browser open.")
+    except Exception as e:
+        print(f"Browser open skipped (Docker environment): {e}")
 
     # Game state
     game_over = False

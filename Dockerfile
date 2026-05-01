@@ -1,5 +1,8 @@
 FROM python:3.9-slim
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Install system dependencies for pygame & X11
 RUN apt-get update && apt-get install -y \
     libsdl2-2.0-0 \
@@ -28,7 +31,7 @@ WORKDIR /app
 
 # Copy requirements and install (better layer caching)
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN uv pip install --system --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
 COPY . /app

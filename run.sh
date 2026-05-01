@@ -28,13 +28,13 @@ echo -e "${BLUE}========================================${NC}\n"
 # Function to fix Docker permissions
 fix_docker_permissions() {
     echo -e "${YELLOW}Fixing Docker permissions...${NC}"
-    
+
     # Add user to docker group
     sudo usermod -aG docker $USER 2>/dev/null
-    
+
     # Fix socket permissions for current session
     sudo chmod 666 /var/run/docker.sock 2>/dev/null
-    
+
     echo -e "${GREEN}✅ Docker permissions fixed${NC}"
     echo -e "${YELLOW}Note: You may need to run 'newgrp docker' for permanent fix${NC}"
     echo ""
@@ -46,13 +46,13 @@ echo -e "${YELLOW}Checking Docker installation...${NC}"
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}❌ Docker is not installed${NC}"
     echo -e "${YELLOW}Installing Docker...${NC}"
-    
+
     sudo apt update
-    sudo apt install -y docker.io docker-compose-plugin
+    sudo apt install -y docker.io docker compose-plugin
     sudo systemctl start docker
     sudo systemctl enable docker
     sudo usermod -aG docker $USER
-    
+
     echo -e "${GREEN}✅ Docker installed${NC}"
     echo -e "${YELLOW}⚠️ Please run: newgrp docker${NC}"
     echo -e "${YELLOW}Then run: ./run.sh${NC}"
@@ -66,14 +66,14 @@ if ! docker version &> /dev/null; then
     echo -e "${YELLOW}Starting Docker daemon...${NC}"
     sudo systemctl start docker
     sleep 3
-    
+
     if docker version &> /dev/null; then
         echo -e "${GREEN}✅ Docker is now running${NC}"
     else
         echo -e "${RED}❌ Cannot connect to Docker${NC}"
         echo -e "${YELLOW}Attempting to fix permissions...${NC}"
         fix_docker_permissions
-        
+
         if docker version &> /dev/null; then
             echo -e "${GREEN}✅ Fixed! Docker is now accessible${NC}"
         else
@@ -91,7 +91,7 @@ fi
 if ! docker ps &> /dev/null; then
     echo -e "${YELLOW}⚠️ Permission issue detected${NC}"
     fix_docker_permissions
-    
+
     if docker ps &> /dev/null; then
         echo -e "${GREEN}✅ Permission fixed!${NC}"
     else
@@ -164,7 +164,38 @@ export DISPLAY=$DISPLAY
 
 # Start game
 echo -e "\n${GREEN}Starting Docker containers...${NC}"
-docker compose up $REBUILD
+docker compose up $REBUILD -d # -d starts containers in background
+
+# Wait for Flask API to be ready
+echo -e "${YELLOW}Waiting for API to be ready...${NC}"
+MAX_RETRIES=30
+RETRY=0
+while ! curl -s http://localhost:5000/top-scores > /dev/null 2>&1; do
+    RETRY=$((RETRY+1))
+    if [ $RETRY -ge $MAX_RETRIES ]; then
+        echo -e "${RED}Timeout waiting for API. Website may not open automatically.${NC}"
+        break
+    fi
+    sleep 1
+done
+
+# Open leaderboard in browser
+if [ $RETRY -lt $MAX_RETRIES ]; then
+    echo -e "${GREEN}API is ready! Opening leaderboard...${NC}"
+    if command -v xdg-open &> /dev/null; then
+        xdg-open http://localhost:5000/leaderboard
+    elif command -v open &> /dev/null; then
+        open http://localhost:5000/leaderboard
+    else
+        echo -e "${YELLOW}Please open http://localhost:5000/leaderboard in your browser${NC}"
+    fi
+else
+    echo -e "${YELLOW}You can manually open http://localhost:5000/leaderboard when API is ready${NC}"
+fi
+
+# Show logs (press Ctrl+C to stop)
+echo -e "${GREEN}Showing container logs (press Ctrl+C to stop the game)...${NC}"
+docker compose logs -f
 
 # Cleanup
 echo -e "\n${YELLOW}Cleaning up...${NC}"
