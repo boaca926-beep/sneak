@@ -109,6 +109,15 @@ def show_game_over(screen, font, score, player_name=""):
     pygame.display.flip()
 
 
+def show_paused(screen, font):
+    """Display paused message."""
+    paused_text = font.render("PAUSED", True, WHITE)
+    resume_text = font.render("Press any key to resume", True, WHITE)  # <-- updated message
+    screen.blit(paused_text, (WIDTH // 2 - paused_text.get_width() // 2, HEIGHT // 2 - 30))
+    screen.blit(resume_text, (WIDTH // 2 - resume_text.get_width() // 2, HEIGHT // 2 + 20))
+    pygame.display.flip()
+
+
 def get_player_name(screen, font):
     """Get player name before game starts."""
     name = ""
@@ -234,6 +243,7 @@ def main():
     # Game state
     game_over = False
     game_over_sent = False
+    paused = False
     snake, direction, next_direction, food, score = reset_game()
 
     running = True
@@ -251,15 +261,27 @@ def main():
 
                 if not game_over:
                     print("Game ongoing ...")
-                    # Change direction based on key press (prevent 180-degree turns)
-                    if event.key == pygame.K_UP and direction != DOWN:
-                        next_direction = UP
-                    elif event.key == pygame.K_DOWN and direction != UP:
-                        next_direction = DOWN
-                    elif event.key == pygame.K_LEFT and direction != RIGHT:
-                        next_direction = LEFT
-                    elif event.key == pygame.K_RIGHT and direction != LEFT:
-                        next_direction = RIGHT
+                    if not paused:
+                        # Normal gameplay: change direction or pause
+                        if event.key == pygame.K_UP and direction != DOWN:
+                            next_direction = UP
+                        elif event.key == pygame.K_DOWN and direction != UP:
+                            next_direction = DOWN
+                        elif event.key == pygame.K_LEFT and direction != RIGHT:
+                            next_direction = LEFT
+                        elif event.key == pygame.K_RIGHT and direction != LEFT:
+                            next_direction = RIGHT
+                        elif event.key == pygame.K_p:
+                            paused = True  # Pause the game
+                    else:
+                        # Game is paused: any key press resumes
+                        # (except we still allow Q to quit if desired)
+                        if event.key == pygame.K_q:
+                            running = False
+                            pygame.quit()
+                            sys.exit()
+                        else:
+                            paused = False  # Resume on any other key
                 else:
                     # When game over, check for restart or quit
                     if event.key == pygame.K_r:
@@ -268,10 +290,24 @@ def main():
                         snake, direction, next_direction, food, score = reset_game()
                         game_over = False
                         game_over_sent = False
+                        paused = False
                     elif event.key == pygame.K_q:
                         running = False
                         pygame.quit()
                         sys.exit()
+
+        # ========== PAUSE HANDLING ==========
+        # If paused, draw everything but skip game logic
+        if paused and not game_over:
+            screen.fill(BLACK)
+            draw_grid(screen)
+            draw_food(screen, food)
+            draw_snake(screen, snake)
+            show_score(screen, font, score, player_name)
+            show_paused(screen, font)
+            pygame.display.flip()
+            clock.tick(FPS)
+            continue  # Do not update game state
 
         if not game_over:
             # === Update Game Logic ===
@@ -339,19 +375,19 @@ def main():
         show_score(screen, font, score, player_name)  # Show score
 
         if game_over:
-
             # Use a flag to avoid sending multiple times
             if not game_over_sent:
                 send_score_to_api(player_name, score)
                 game_over_sent = True
             show_game_over(screen, font, score, player_name)
+        elif paused:
+            # Extra safety (should already be handled above)
+            show_paused(screen, font)
 
         pygame.display.flip()  # Update display
         clock.tick(FPS)  # Control game speed
 
-        # continue
-
 
 if __name__ == "__main__":
-    print("Starting tot make a snake game ...")
+    print("Starting to make a snake game ...")
     main()
