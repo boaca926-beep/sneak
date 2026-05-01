@@ -37,6 +37,21 @@ A classic Snake game built with Python and Pygame. Control a snake, eat food to 
 5. You win if the snake fills the entire grid!
 
 ## 🚀 Quick Start
+```bash
+# For Ubuntu system
+./run.sh --rebuild
+```
+- ✅ Detect if Docker is installed
+
+- ✅ Start Docker daemon if needed
+
+- ✅ Automatically fix permission issues (new!)
+
+- ✅ Clean up port 5000
+
+- ✅ Start the Snake Game
+
+- ✅ Clean up when done
 
 ### Local Installation
 
@@ -471,13 +486,12 @@ How to evolve this project toward data engineering
         After the game is closed, automatically upload scores.db to S3 or Google Cloud Storage.
 ```
 ## Add a Desktop short-cut with icon
+**Bash script $HOME/.local/share/applications/snake-game.desktop**
 ```bash
-# Add bash script /home/bo/.local/share/applications/snake-game.desktop
-# Change ownership: chmod +x snake-game.deskop
 Version=1.0
 Name=Snake Game
 Comment=Play the Snake Game in a Docker container
-Exec=gnome-terminal --working-directory=/home/bo/Desktop/sneak -- bash -c "./run.sh; echo 'Press Enter to exit...'; read"
+Exec=gnome-terminal --working-directory=$HOME/Desktop/sneak -- bash -c "./run.sh; echo 'Press Enter to exit...'; read"
 Icon=utilities-terminal
 Terminal=false
 Type=Application
@@ -485,17 +499,18 @@ Categories=Game;
 StartupNotify=true
 ```
 
-**Add snake-game.desktop**
+**Update the script**
 ```bash
-Name=Snake Game
-Comment=Play the Snake Game in a Docker container
-Exec=gnome-terminal -- bash -c "cd /home/bo/Desktop/sneak && export LIBGL_ALWAYS_SOFTWARE=1 && export SDL_VIDEODRIVER=x11 && ./run.sh; echo 'Game closed. Press Enter to exit...'; read"
-Icon=utilities-terminal
-Terminal=false
-Type=Application
-Categories=Game;
-StartupNotify=true
-Icon=/home/bo/.local/share/icons/snake-icon.png
+update-desktop-database ~/.local/share/applications/
+# Change ownership
+chmod +x ~/.local/share/applications/snake-game.desktop
+```
+
+**Add a Desktop shortcut**
+```bash
+cp ~/.local/share/applications/snake-game.desktop ~/Desktop/
+# Test run
+gtk-launch snake-game.desktop
 ```
 
 ## For Data Engineer
