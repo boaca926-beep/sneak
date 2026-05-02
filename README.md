@@ -30,7 +30,7 @@ A classic Snake game built with Python and Pygame. Control a snake, eat food to 
 
 ### Game Rules
 1. Control the snake to eat the red food blocks
-2. Each food eaten increases your score by 1
+2. Each food eaten increases score by 1
 3. The snake grows longer after eating
 4. Game ends if the snake:
    - Hits the wall
@@ -339,7 +339,7 @@ def get_player_name(screen, font):
     cursor_visible = True
     cursor_timer = 0
 
-    prompt_text = font.render("Enter your name: ", True, WHITE)
+    prompt_text = font.render("Enter player's name: ", True, WHITE)
     instruction_text = font.render("Press Enter to start, ESC to default",
                                    True, GRAY)
 
@@ -770,7 +770,7 @@ SELECT * FROM scores;
 
 ## Auto‑refreshing leaderboard window
 
-### 1. Create leaderboard.html in your project folder
+### 1. Create leaderboard.html in the project folder
 ```bash
 leaderboard.html
 ```
@@ -793,9 +793,9 @@ webbrowser.open(f"file://{leaderboard_path}", new=2)  # new=2 opens in new tab i
 ```bash
 - The score-api container must be running and accessible on localhost:5000.
 
-- Your docker-compose.yml already maps "5000:5000", so the host can reach it.
+- The docker-compose.yml already maps "5000:5000", so the host can reach it.
 
-- The browser (running on your host) will fetch http://localhost:5000/top-scores without any problem.
+- The browser (running on local host) will fetch http://localhost:5000/top-scores without any problem.
 ```
 
 ### 4. Full integration to snake.py
