@@ -14,7 +14,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS scores (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_name TEXT NOT NULL,
-                score INTEGER NOT NULL,
+                score FLOAT NOT NULL,
+                level INTEGER NOT NULL,
                 timestamp TEXT NOT NULL
             )
         """)
@@ -25,11 +26,11 @@ def init_db():
 @app.route("/score", methods=["POST"])
 def add_score():
     """
-    Expects JSON: {"player_name": "Alice", "score": 123}
+    Expects JSON: {"player_name": "Alice", "score": 123, "level": 5}
     Stores the score in the database.
     """
     data = request.get_json()
-    if not data or "player_name" not in data or "score" not in data:
+    if not data or "player_name" not in data or "score" not in data or "level" not in data:
         # If either condition is true, it returns an error response with HTTP 400
         return jsonify({"error": "Missing player_name or score"}), 400
 
@@ -43,12 +44,19 @@ def add_score():
     if score < 0:
         return jsonify({"error": "score must be non-negative"}), 400
 
+    try:
+        level = int(data["level"])
+    except (ValueError, TypeError):
+        return jsonify({"error": "level must be an integer"}), 400
+    if level < 1:
+        return jsonify({"error": "level must be at least 1"}), 400
+
     timestamp = datetime.utcnow().isoformat()
 
     with sqlite3.connect(DATABASE) as conn:
         conn.execute(
-            "INSERT INTO scores (player_name, score, timestamp) VALUES (?, ?, ?)",
-            (player_name, score, timestamp),
+            "INSERT INTO scores (player_name, score, level, timestamp) VALUES (?, ?, ?, ?)",
+            (player_name, score, level, timestamp),
         )
     return jsonify({"message": "Score saved successfully"}), 201
 
@@ -61,10 +69,13 @@ def get_top_scores():
     with sqlite3.connect(DATABASE) as conn:
         # DESC: Sorts the scores in descending order, so the highest scores come first.
         cursor = conn.execute(
-            "SELECT player_name, score, timestamp FROM scores ORDER BY score DESC LIMIT 10"
+            "SELECT player_name, score, level, timestamp FROM scores ORDER BY score DESC LIMIT 10"
         )
         rows = cursor.fetchall()
-    top_scores = [{"player_name": row[0], "score": row[1], "timestamp": row[2]} for row in rows]
+    top_scores = [
+        {"player_name": row[0], "score": row[1], "level": row[2], "timestamp": row[3]}
+        for row in rows
+    ]
     return jsonify(top_scores)
 
 
@@ -79,11 +90,14 @@ def get_all_scores():
     limit = max(1, min(limit, 1000))  # At least 1, at most 1000
     with sqlite3.connect(DATABASE) as conn:
         cursor = conn.execute(
-            "SELECT player_name, score, timestamp FROM scores ORDER BY timestamp DESC LIMIT ?",
+            "SELECT player_name, score, level, timestamp FROM scores ORDER BY timestamp DESC LIMIT ?",
             (limit,),
         )
         rows = cursor.fetchall()
-    all_scores = [{"player_name": row[0], "score": row[1], "timestamp": row[2]} for row in rows]
+    all_scores = [
+        {"player_name": row[0], "score": row[1], "level": row[2], "timestamp": row[3]}
+        for row in rows
+    ]
     return jsonify(all_scores)
 
 

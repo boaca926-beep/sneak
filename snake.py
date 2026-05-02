@@ -209,16 +209,13 @@ def reset_game():
     return snake, direction, next_direction, food, score
 
 
-def send_score_to_api(player_name, score):
-    """
-    Send the final score to the API
-    """
+def send_score_to_api(player_name, score, level):
     url = f"{API_BASE}/score"
-    payload = {"player_name": player_name, "score": score}
+    payload = {"player_name": player_name, "score": int(score), "level": level}
     try:
         response = requests.post(url, json=payload, timeout=2)
         if response.status_code == 201:
-            print(f"Score saved: {player_name} - {score}")
+            print(f"Score saved: {player_name} - {score} (level {level})")
         else:
             print(f"Failed to save score: {response.status_code} - {response.text}")
     except requests.RequestException as e:
@@ -366,11 +363,6 @@ def main():
                     FPS = min(MAX_FPS, FPS + SPEED_INCREMENT)
                     print(f"Speed increased! Current FPS: {FPS}")
 
-                # Gradual speed increase
-                if score % INCREMENT_EVERY == 0:
-                    FPS = min(MAX_FPS, FPS + SPEED_INCREMENT)
-                    print(f"Speed increased! Current FPS: {FPS}")
-
                 # Generate new food at a position not occupied by the snake
                 free_cells = [
                     (x, y)
@@ -415,7 +407,7 @@ def main():
         if game_over:
             # Use a flag to avoid sending multiple times
             if not game_over_sent:
-                send_score_to_api(player_name, score)
+                send_score_to_api(player_name, score, level)
                 game_over_sent = True
             show_game_over(screen, font, score, player_name)
         elif paused:

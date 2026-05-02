@@ -150,6 +150,7 @@
                                 <th>Rank</th>
                                 <th>Player</th>
                                 <th>Score</th>
+                                <th>Level</th>
                                 <th>Date & Time (Local)</th>
                             </tr>
                         </thead>
@@ -163,11 +164,13 @@
                         else if (rank === 3) rankClass = 'rank-3';
 
                         const formattedDate = formatTimestamp(entry.timestamp);
+                        const level = entry.level !== undefined ? entry.level : '?';
 
                         html += `<tr>
                                     <td class="${rankClass}">${rank}</td>
                                     <td>${escapeHtml(entry.player_name)}</td>
                                     <td>${entry.score}</td>
+                                    <td>${level}</td>
                                     <td class="timestamp-local">${formattedDate}</td>
                                 </tr>`;
                     });

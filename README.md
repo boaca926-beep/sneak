@@ -198,7 +198,7 @@ Potential features to add:
 
 - High score tracking with persistent storage
 
-- Multiple difficulty levels (speed increases over time)
+- ✅ Multiple difficulty levels (speed increases over time)
 
 - Power-ups and special food types
 
