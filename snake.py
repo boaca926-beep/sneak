@@ -6,8 +6,9 @@ from operator import le
 from urllib import response
 import webbrowser
 import os
+from collections import deque # for BFS, FS stands for Breadth-First Search - it's a graph traversal algorithm that explores nodes level by level, moving outward from the starting point.
 
-from flask import request
+from flask import Blueprint, request
 import pygame
 import random
 import sys
@@ -16,7 +17,10 @@ import requests
 # Initialize Pygame
 pygame.init()
 
-# global FPS
+# ========================== GAME MODES ==========================
+#global vs_ai # Set to True for Human vs AI, False for single‑player
+#vs_ai = select_game_mode(screen, font)
+# ================================================================
 
 # Constants; game basic attributions
 CELL_SIZE = 30  # Size of a single cell
@@ -28,9 +32,11 @@ HEIGHT = GRID_HEIGHT * CELL_SIZE  # Total HEIGHT
 # Colors (R, G, B)
 BLACK = (0, 0, 0)
 WHITE = (200, 200, 200)
-GREEN = (0, 200, 0)
+GREEN = (0, 200, 0)  # Human snake color
+BLUE = (0, 0, 200)  # AI snake color
 RED = (255, 0, 0)
 DARK_GREEN = (0, 150, 0)
+DARK_BLUE = (0, 50, 100)
 GRAY = (50, 50, 50)
 
 # Directions
@@ -46,9 +52,9 @@ API_BASE = "http://localhost:5000"
 LEVEL_EVERY = 5  # Increase level every N points
 
 
-def random_food_position(snake):
+def random_food_position(snake, snake2=None):
     """
-    Generate a radom position that is not occupied by the snake.
+    Generate a radom position that is not occupied by any snake.
     """
 
     while (
@@ -56,7 +62,7 @@ def random_food_position(snake):
     ):  # Keep creating random food to feed the snake, except interruptions eg., game over, etc.
         x = random.randint(0, GRID_WIDTH - 1)  # Allowed food x coordinates
         y = random.randint(0, GRID_HEIGHT - 1)  # Allowed food y coordinates
-        if (x, y) not in snake:
+        if (x, y) not in snake and (snake2 is None or (x, y) not in snake2):
             return (x, y)
 
 
@@ -71,12 +77,12 @@ def draw_grid(screen):
         pygame.draw.line(screen, GRAY, (0, y), (WIDTH, y))
 
 
-def draw_snake(screen, snake):
+def draw_snake(screen, snake, color, border_color):
     """Draw the snake on the screen"""
     for segment in snake:
         rect = pygame.Rect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-        pygame.draw.rect(screen, GREEN, rect)
-        pygame.draw.rect(screen, DARK_GREEN, rect, 2)  # border
+        pygame.draw.rect(screen, color, rect)
+        pygame.draw.rect(screen, border_color, rect, 2)  # border
         # print(
         #    f"rec. coord: {segment[0] * CELL_SIZE}, {segment[1] * CELL_SIZE}, {CELL_SIZE}, {CELL_SIZE}"
         # )
@@ -89,21 +95,23 @@ def draw_food(screen, food):
     pygame.draw.rect(screen, (200, 0, 0), rect, 2)  # border
 
 
-def show_score(screen, font, score, player_name="", level=1):
-    """Display the current score and player name"""
+def show_score(screen, font, score, player_name="", level=1, x=10, y=10):
+    """Display score for a player (default top‑left)."""
     score_text = font.render(f"Score: {score}", True, WHITE)
-    name_text = font.render(f"Player: {player_name}", True, WHITE)
+    name_text = font.render(f"{player_name}", True, WHITE)
     level_text = font.render(f"Level: {level}", True, WHITE)
+    screen.blit(score_text, (x, y))
+    screen.blit(name_text, (x, y + 30))
+    screen.blit(level_text, (x, y + 60))
 
-    screen.blit(score_text, (10, 10))
-    screen.blit(name_text, (WIDTH - name_text.get_width() - 10, 10))
-    screen.blit(level_text, (WIDTH // 2 - level_text.get_width() // 2, 10))
 
-
-def show_game_over(screen, font, score, player_name=""):
+def show_game_over(screen, font, score, player_name="", winner=None):
     """Display game over message and final score."""
     screen.fill(BLACK)
-    game_over_text = font.render("GAME OVER", True, RED)
+    if winner:
+        game_over_text = font.render(f"{winner} WINS!", True, RED)
+    else:
+        game_over_text = font.render("GAME OVER", True, RED)
     score_text = font.render(f"Final Score: {score}", True, WHITE)
     restart_text = font.render("Press R to restart or Q to quit", True, WHITE)
     name_text = font.render(f"Player: {player_name}", True, WHITE)
@@ -203,11 +211,61 @@ def reset_game():
     snake = [(start_x, start_y), (start_x - 1, start_y), (start_x - 2, start_y)]
     direction = RIGHT
     next_direction = RIGHT
-    food = random_food_position(snake)
     score = 0
 
-    return snake, direction, next_direction, food, score
+    return snake, direction, next_direction, score
 
+
+def reset_ai_snake():
+    """Reset AI snake to a mirrored starting position."""
+    start_x = GRID_WIDTH - GRID_WIDTH // 2 - 1
+    start_y = GRID_HEIGHT // 2
+    snake = [(start_x, start_y), (start_x + 1, start_y), (start_x + 2, start_y)]
+    direction = LEFT
+    next_direction = LEFT
+    score = 0
+
+    return snake, direction, next_direction, score
+
+def ai_next_direction(snake, food, other_snake=None):
+    """
+    BFS shortest path from snake head to food.
+    Avoid walls, own body, and the other snake's body
+    Returns a safe direction (UP/DOWN/LEFT/RIGHT)
+    """
+    head = snake[0]
+    grid_w, grid_h = GRID_WIDTH, GRID_HEIGHT
+
+    # Blocked cells: own body (expect tail will move, but we include it for safty)
+    blocked = set(snake[1:])
+    if other_snake is not None:
+        blocked.update(other_snake) # avoid hitting the other snake by adding the other snake's body
+
+    queue = deque([(head, [])]) # Start with head position and empty path
+    visited = {head}
+
+    dirs = [(UP, (0, -1)), (DOWN, (0, 1)), (LEFT, (-1, 0)), (RIGHT, (1, 0))]
+
+    while queue:
+        (x, y), path = queue.popleft()
+        if (x, y) == food:
+            return path[0] if path else None
+
+        for direction, (dx, dy) in dirs:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < grid_w and 0 <= ny < grid_h:
+                if (nx, ny) not in blocked and (nx, ny) not in visited:
+                    visited.add((nx, ny))
+                    queue.append(((nx, ny), path + [direction]))
+
+    # No path found -> pick a safe move that does not ause immediate death
+    for direction, (dx, dy) in dirs:
+        nx, ny = head[0] + dx, head[1] + dy
+        if 0 <= nx < grid_w and 0 <= ny < grid_h:
+            if (nx, ny) not in snake[1:]:
+                if other_snake is None or (nx, ny) not in other_snake:
+                    return direction
+    return UP # fallback
 
 def send_score_to_api(player_name, score, level):
     url = f"{API_BASE}/score"
@@ -221,6 +279,51 @@ def send_score_to_api(player_name, score, level):
     except requests.RequestException as e:
         print(f"Error sending score to API: {e}")
 
+def select_game_mode(screen, font):
+    """Allow player to select game mode at startup."""
+    options = ["Single Player", "VS AI"]
+    selected = 0
+
+    while True:
+        screen.fill(BLACK)
+
+        # Draw title
+        title_text = font.render("SNAKE GAME", True, GREEN)
+        screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, HEIGHT // 2 - 150))
+        
+        # Draw instruction
+        instruction_text = font.render("Select Game Mode:", True, WHITE)
+        screen.blit(instruction_text, (WIDTH // 2 - instruction_text.get_width() // 2, HEIGHT // 2 - 80))
+
+        # Draw options
+        for i, option in enumerate(options):
+            color = BLUE if i == selected else WHITE
+            mode_text = font.render(option, True, color)
+            y_pos = HEIGHT // 2 -20 + (i * 60)
+            screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, y_pos))
+
+        # Draw controls
+        controls_text = font.render("Use UP/DOWN to select, ENTER to confirm", True, GRAY)
+        screen.blit(controls_text, (WIDTH // 2 - controls_text.get_width() // 2, HEIGHT - 100))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    selected = (selected - 1) % len(options)
+                    #print(selected, selected - 1)
+                elif event.key == pygame.K_DOWN:
+                    selected = (selected + 1) % len(options)
+                elif event.key == pygame.K_RETURN:
+                    # Return True for VS AI mode, False for single player
+                    return selected == 1
+
+    #return False
 
 # The main program
 def main():
@@ -231,6 +334,10 @@ def main():
     pygame.display.set_caption("Snake Game")
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, 36)
+
+    # Select game mode
+    #vs_ai = False
+    vs_ai = select_game_mode(screen, font)
 
     # Get player name
     player_name = get_player_name(screen, font)
@@ -256,14 +363,34 @@ def main():
     except Exception as e:
         print(f"Browser open skipped (Docker environment): {e}")
 
-    # Game state
+    # Game state (signal or two-player)
     game_over = False
     game_over_sent = False
     paused = False
-    snake, direction, next_direction, food, score = reset_game()
+
+    # Human player (always present)
+    snake, direction, next_direction, score = reset_game()
     level = 1
 
+    # AI oppenent (only if vs_ai is True)
+    if vs_ai:
+        snake_ai, direction_ai, next_direction_ai, score_ai = reset_ai_snake()
+        level_ai = 1
+        print("AI opponent enabled! (not implemented yet)")
+    else:
+        snake_ai = None
+        direction_ai = None
+        next_direction_ai = None
+        score_ai = 0
+        level_ai = 0
+        print("Playing against yourself! (no AI opponent)")
+
+    # Initial food (no collision)
+    food = random_food_position(snake, snake_ai)
+
+    winner = None  # Track winner for potential future use
     running = True
+
     while running:
         # === Event Handling ===
         for event in pygame.event.get():
@@ -274,7 +401,7 @@ def main():
                 sys.exit()
 
             if event.type == pygame.KEYDOWN:
-                print(event.type)
+                #print(event.type)
 
                 if not game_over:
                     # print("Game ongoing ...")
@@ -304,13 +431,17 @@ def main():
                     if event.key == pygame.K_r:
                         # Reset everything
                         print(f"Reset game!")
-                        snake, direction, next_direction, food, score = reset_game()
+                        snake, direction, next_direction, score = reset_game()
+                        level = 1
+                        if vs_ai:
+                            snake_ai, direction_ai, next_direction_ai, score_ai = reset_ai_snake()
+                            level_ai = 1
+                        food = random_food_position(snake, snake_ai)
                         game_over = False
                         game_over_sent = False
                         paused = False
                         FPS = starting_fps
-                        level = 1
-
+                        winner = None
                     elif event.key == pygame.K_q:
                         running = False
                         pygame.quit()
@@ -322,15 +453,20 @@ def main():
             screen.fill(BLACK)
             draw_grid(screen)
             draw_food(screen, food)
-            draw_snake(screen, snake)
-            show_score(screen, font, score, player_name, level)
+            draw_snake(screen, snake, GREEN, DARK_GREEN)
+            if vs_ai:
+                draw_snake(screen, snake_ai, BLUE, DARK_BLUE)
+            show_score(screen, font, score, player_name, level, 10, 10)
+            if vs_ai:
+                show_score(screen, font, score_ai, "AI", level_ai, WIDTH - 150, 10)
             show_paused(screen, font)
             pygame.display.flip()
             clock.tick(FPS)
             continue  # Do not update game state
 
+        # === Update Game Logic ===
         if not game_over:
-            # === Update Game Logic ===
+            # === Human snake movement ===
             direction = next_direction  # Apply the queued direction
 
             # Calculaion new head position
@@ -341,8 +477,25 @@ def main():
             new_head = (head_x + dx, head_y + dy)
             # print(f"new head: (x, y) = {new_head}")
 
+            # === AI snake movement (if vs_ai is true)
+            if vs_ai:
+                ai_dir = ai_next_direction(snake_ai, food, other_snake=snake)
+                if ai_dir:
+                    # Prevent reversing
+                    if ((ai_dir == UP and direction_ai != DOWN) or
+                        (ai_dir == DOWN and direction_ai != UP) or
+                        (ai_dir == LEFT and direction_ai != RIGHT) or
+                        (ai_dir == RIGHT and direction_ai != LEFT)):
+                        direction_ai = ai_dir
+                head_ai_x, head_ai_y = snake_ai[0]
+                dx_ai, dy_ai = direction_ai
+                new_head_ai = (head_ai_x + dx_ai, head_ai_y + dy_ai)
+
+
+
             # Check for food collision
             ate_food = new_head == food
+            ate_food_ai = (vs_ai and new_head_ai == food)
             # print(f"ate_food: {ate_food}")
 
             # print(food)
@@ -364,12 +517,21 @@ def main():
                     print(f"Speed increased! Current FPS: {FPS}")
 
                 # Generate new food at a position not occupied by the snake
-                free_cells = [
-                    (x, y)
-                    for x in range(GRID_WIDTH)
-                    for y in range(GRID_HEIGHT)
-                    if (x, y) not in snake
-                ]
+                if vs_ai:
+                    free_cells = [
+                        (x, y)
+                        for x in range(GRID_WIDTH)
+                        for y in range(GRID_HEIGHT)
+                        if (x, y) not in snake and (x, y) not in snake_ai
+                    ]
+                else:
+                    free_cells = [
+                        (x, y)
+                        for x in range(GRID_WIDTH)
+                        for y in range(GRID_HEIGHT)
+                        if (x, y) not in snake
+                    ]
+
                 if not free_cells:
                     # Snake has filled the grid - player wins
                     game_over = True
@@ -380,6 +542,30 @@ def main():
                 snake.insert(0, new_head)
                 snake.pop()
 
+            # AI eats food
+            if vs_ai:
+                if ate_food_ai:
+                    snake_ai.insert(0, new_head_ai)
+                    score_ai += 1.5
+                    new_level_ai = int(score_ai) // LEVEL_EVERY + 1
+                    if new_level_ai > level_ai:
+                        level_ai = new_level_ai
+                        # Optionally increase FPS for AI too – same speed for fairness
+                        # FPS = min(MAX_FPS, FPS + SPEED_INCREMENT)
+                    # Regenerate food (avoid both snakes)
+                    free_cells = [(x, y) for x in range(GRID_WIDTH)
+                                for y in range(GRID_HEIGHT)
+                                if (x, y) not in snake and (x, y) not in snake_ai]
+
+                    if not free_cells:
+                        game_over = True
+                        winner = "AI"
+                        continue
+                    food = random.choice(free_cells)
+                else:
+                    snake_ai.insert(0, new_head_ai)
+                    snake_ai.pop()
+
             # === Collision Detection ===
             # Check wall collision
             if (
@@ -389,20 +575,54 @@ def main():
                 or new_head[1] >= GRID_HEIGHT
             ):
                 game_over = True
+                winner = "Human (Wall)"
                 continue
 
             # Check self collision (head colliding with body)
             # print(f"snake: {snake[1:]}, new_head: {new_head}")
             if new_head in snake[1:]:
                 game_over = True
+                winner = "Human (Self)"
                 continue
+
+            # AI collision checks (only if vs_ai is True)
+            if vs_ai:
+                # Check AI self collision
+                if new_head_ai in snake_ai[1:]:
+                    game_over = True
+                    winner = "AI (Self)"
+                    continue
+
+                # Check human head vs AI body
+                if new_head in snake_ai:
+                    game_over = True
+                    winner = "AI"
+                    continue
+
+                # Check AI head vs human body
+                if new_head_ai in snake:
+                    game_over = True
+                    winner = "Human"
+                    continue
+
+                # Check head-on collision (both heads same cell)
+                if new_head == new_head_ai:
+                    game_over = True
+                    winner = "Tie!"
+                    continue
 
         # === Drawing ===
         screen.fill(BLACK)  # Clear screen
         draw_grid(screen)  # Optional grid
         draw_food(screen, food)  # Draw food
-        draw_snake(screen, snake)  # Draw snake
-        show_score(screen, font, score, player_name, level)  # Show score
+        draw_snake(screen, snake, GREEN, DARK_GREEN)  # Draw snake
+        if vs_ai:
+            draw_snake(screen, snake_ai, BLUE, DARK_BLUE)
+
+        # Display scores and level
+        show_score(screen, font, score, player_name, level, 10, 10)
+        if vs_ai:
+            show_score(screen, font, score_ai, "AI", level_ai, WIDTH - 150, 10)
 
         if game_over:
             # Use a flag to avoid sending multiple times
