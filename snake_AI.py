@@ -18,7 +18,8 @@ import requests
 pygame.init()
 
 # ========================== GAME MODES ==========================
-VS_AI = False  # Set to True for Human vs AI, False for single‑player
+#global vs_ai # Set to True for Human vs AI, False for single‑player
+#vs_ai = select_game_mode(screen, font)
 # ================================================================
 
 # Constants; game basic attributions
@@ -278,6 +279,51 @@ def send_score_to_api(player_name, score, level):
     except requests.RequestException as e:
         print(f"Error sending score to API: {e}")
 
+def select_game_mode(screen, font):
+    """Allow player to select game mode at startup."""
+    options = ["Single Player", "VS AI"]
+    selected = 0
+
+    while True:
+        screen.fill(BLACK)
+
+        # Draw title
+        title_text = font.render("SNAKE GAME", True, GREEN)
+        screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, HEIGHT // 2 - 150))
+        
+        # Draw instruction
+        instruction_text = font.render("Select Game Mode:", True, WHITE)
+        screen.blit(instruction_text, (WIDTH // 2 - instruction_text.get_width() // 2, HEIGHT // 2 - 80))
+
+        # Draw options
+        for i, option in enumerate(options):
+            color = BLUE if i == selected else WHITE
+            mode_text = font.render(option, True, color)
+            y_pos = HEIGHT // 2 -20 + (i * 60)
+            screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, y_pos))
+
+        # Draw controls
+        controls_text = font.render("Use UP/DOWN to select, ENTER to confirm", True, GRAY)
+        screen.blit(controls_text, (WIDTH // 2 - controls_text.get_width() // 2, HEIGHT - 100))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    selected = (selected - 1) % len(options)
+                    #print(selected, selected - 1)
+                elif event.key == pygame.K_DOWN:
+                    selected = (selected + 1) % len(options)
+                elif event.key == pygame.K_RETURN:
+                    # Return True for VS AI mode, False for single player
+                    return selected == 1
+
+    #return False
 
 # The main program
 def main():
@@ -288,6 +334,10 @@ def main():
     pygame.display.set_caption("Snake Game")
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, 36)
+
+    # Select game mode
+    #vs_ai = False
+    vs_ai = select_game_mode(screen, font)
 
     # Get player name
     player_name = get_player_name(screen, font)
@@ -322,8 +372,8 @@ def main():
     snake, direction, next_direction, score = reset_game()
     level = 1
 
-    # AI oppenent (only if VS_AI is True)
-    if VS_AI:
+    # AI oppenent (only if vs_ai is True)
+    if vs_ai:
         snake_ai, direction_ai, next_direction_ai, score_ai = reset_ai_snake()
         level_ai = 1
         print("AI opponent enabled! (not implemented yet)")
@@ -383,7 +433,7 @@ def main():
                         print(f"Reset game!")
                         snake, direction, next_direction, score = reset_game()
                         level = 1
-                        if VS_AI:
+                        if vs_ai:
                             snake_ai, direction_ai, next_direction_ai, score_ai = reset_ai_snake()
                             level_ai = 1
                         food = random_food_position(snake, snake_ai)
@@ -404,10 +454,10 @@ def main():
             draw_grid(screen)
             draw_food(screen, food)
             draw_snake(screen, snake, GREEN, DARK_GREEN)
-            if VS_AI:
+            if vs_ai:
                 draw_snake(screen, snake_ai, BLUE, DARK_BLUE)
             show_score(screen, font, score, player_name, level, 10, 10)
-            if VS_AI:
+            if vs_ai:
                 show_score(screen, font, score_ai, "AI", level_ai, WIDTH - 150, 10)
             show_paused(screen, font)
             pygame.display.flip()
@@ -427,8 +477,8 @@ def main():
             new_head = (head_x + dx, head_y + dy)
             # print(f"new head: (x, y) = {new_head}")
 
-            # === AI snake movement (if VS_AI is true)
-            if VS_AI:
+            # === AI snake movement (if vs_ai is true)
+            if vs_ai:
                 ai_dir = ai_next_direction(snake_ai, food, other_snake=snake)
                 if ai_dir:
                     # Prevent reversing
@@ -445,7 +495,7 @@ def main():
 
             # Check for food collision
             ate_food = new_head == food
-            ate_food_ai = (VS_AI and new_head_ai == food)
+            ate_food_ai = (vs_ai and new_head_ai == food)
             # print(f"ate_food: {ate_food}")
 
             # print(food)
@@ -467,7 +517,7 @@ def main():
                     print(f"Speed increased! Current FPS: {FPS}")
 
                 # Generate new food at a position not occupied by the snake
-                if VS_AI:
+                if vs_ai:
                     free_cells = [
                         (x, y)
                         for x in range(GRID_WIDTH)
@@ -493,7 +543,7 @@ def main():
                 snake.pop()
 
             # AI eats food
-            if VS_AI:
+            if vs_ai:
                 if ate_food_ai:
                     snake_ai.insert(0, new_head_ai)
                     score_ai += 1.5
@@ -535,8 +585,8 @@ def main():
                 winner = "Human (Self)"
                 continue
 
-            # AI collision checks (only if VS_AI is True)
-            if VS_AI:
+            # AI collision checks (only if vs_ai is True)
+            if vs_ai:
                 # Check AI self collision
                 if new_head_ai in snake_ai[1:]:
                     game_over = True
@@ -566,12 +616,12 @@ def main():
         draw_grid(screen)  # Optional grid
         draw_food(screen, food)  # Draw food
         draw_snake(screen, snake, GREEN, DARK_GREEN)  # Draw snake
-        if VS_AI:
+        if vs_ai:
             draw_snake(screen, snake_ai, BLUE, DARK_BLUE)
 
         # Display scores and level
         show_score(screen, font, score, player_name, level, 10, 10)
-        if VS_AI:
+        if vs_ai:
             show_score(screen, font, score_ai, "AI", level_ai, WIDTH - 150, 10)
 
         if game_over:
