@@ -345,7 +345,7 @@ def main():
     # Difficult selection
     print("\nChoose difficulty level: 1=Easy (slow), 2=Medium (Medium), 3=Hard (fast)")
     diff = "1"  # input("Enter 1, 2 or 3 (default=2): ") or "2"
-    base_fps = {"1": 6, "2": 10, "3": 14}.get(diff, 10)
+    base_fps = {"1": 4, "2": 10, "3": 14}.get(diff, 10)
     FPS = base_fps
     MAX_FPS = base_fps + 5  # so hard starts faster and can go even higher
     starting_fps = FPS  # Store initial FPS for reference
