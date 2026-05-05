@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     libsdl2-2.0-0 \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
+    libpulse0 \
+    alsa-utils \
     libsdl2-ttf-2.0-0 \
     libgl1 \
     libgl1-mesa-dri \
