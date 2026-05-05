@@ -1,21 +1,47 @@
-# from re import S
-# from time import sleep
-
-from cmd import PROMPT
-from operator import le
-from urllib import response
 import webbrowser
 import os
 from collections import deque # for BFS, FS stands for Breadth-First Search - it's a graph traversal algorithm that explores nodes level by level, moving outward from the starting point.
-
-from flask import Blueprint, request
 import pygame
 import random
 import sys
 import requests
+from helper import create_beep_sounds
 
 # Initialize Pygame
 pygame.init()
+
+# Initialize font system
+pygame.font.init()
+
+# Initialize sound mixer (THIS IS CRITICAL!)
+pygame.mixer.init()
+
+# Create sound files if they don't exist
+create_beep_sounds()
+
+# Initialize sound (add this after pygame.init())
+try:
+    eat_sound = pygame.mixer.Sound("eat.wav")
+    game_over_sound = pygame.mixer.Sound("game_over.wav")
+except:
+    print("Sound files not found, playing without sound")
+    eat_sound = None
+    game_over_sound = None
+
+# Load and play background music
+bkg_music="background_rock"
+try:
+    if os.path.exists(f"{bkg_music}.mp3"):
+        pygame.mixer.music.load(f"{bkg_music}.mp3")
+        pygame.mixer.music.set_volume(0.3)  # 30% volume
+        pygame.mixer.music.play(-1)  # Loop forever
+        print("🎵 Background music playing")
+    else:
+        print("⚠️ No background.wav found")
+except Exception as e:
+    print(f"⚠️ Could not play background music: {e}")
+
+
 
 # ========================== GAME MODES ==========================
 #global vs_ai # Set to True for Human vs AI, False for single‑player
@@ -97,7 +123,7 @@ def draw_food(screen, food):
 
 def show_score(screen, font, score, player_name="", level=1, x=10, y=10):
     """Display score for a player (default top‑left)."""
-    score_text = font.render(f"Score: {score}", True, WHITE)
+    score_text = font.render(f"Score: {int(score)}", True, WHITE)
     name_text = font.render(f"{player_name}", True, WHITE)
     level_text = font.render(f"Level: {level}", True, WHITE)
     screen.blit(score_text, (x, y))
@@ -327,7 +353,7 @@ def select_game_mode(screen, font):
 
 # The main program
 def main():
-    global FPS
+    global FPS, vs_ai
 
     # Set up display
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -376,7 +402,7 @@ def main():
     if vs_ai:
         snake_ai, direction_ai, next_direction_ai, score_ai = reset_ai_snake()
         level_ai = 1
-        print("AI opponent enabled! (not implemented yet)")
+        print("AI opponent enabled!")
     else:
         snake_ai = None
         direction_ai = None
@@ -497,15 +523,20 @@ def main():
             ate_food = new_head == food
             ate_food_ai = (vs_ai and new_head_ai == food)
             # print(f"ate_food: {ate_food}")
+            any_ate = ate_food or ate_food_ai
 
-            # print(food)
+            # Play sound when eating
+            if ate_food and eat_sound:
+                eat_sound.play()
+            elif ate_food_ai and eat_sound:
+                eat_sound.play()
 
-            # Perform movement
+            # Human movement
             if ate_food:
                 # Insert new head without removing tail (snake grows)
                 snake.insert(0, new_head)
                 # print(f"new head: {new_head}")
-                score += 1.5  # Increase score by 1.5 for each food eaten
+                score += 1  # Increase score by 1.5 for each food eaten
 
                 # Level progession
                 new_level = int(score) // LEVEL_EVERY + 1
@@ -515,8 +546,27 @@ def main():
                     # Optional: increase speed on level up
                     FPS = min(MAX_FPS, FPS + SPEED_INCREMENT)
                     print(f"Speed increased! Current FPS: {FPS}")
+            else:
+                # Normal move: insert new head and remove tail
+                snake.insert(0, new_head)
+                snake.pop()
 
-                # Generate new food at a position not occupied by the snake
+            # Handle AI eating
+            if vs_ai:
+                if ate_food_ai:
+                    snake_ai.insert(0, new_head_ai)
+                    score_ai += 1  # Changed from 1.5 to 1
+                    new_level_ai = int(score_ai) // LEVEL_EVERY + 1
+                    if new_level_ai > level_ai:
+                        level_ai = new_level_ai
+                else:
+                    # Normal move for AI
+                    snake_ai.insert(0, new_head_ai)
+                    snake_ai.pop()
+        
+            # Generate new food at a position not occupied by the snake
+            if any_ate:
+                # Find all free cells
                 if vs_ai:
                     free_cells = [
                         (x, y)
@@ -537,34 +587,7 @@ def main():
                     game_over = True
                     continue
                 food = random.choice(free_cells)
-            else:
-                # Normal move: insert new head and remove tail
-                snake.insert(0, new_head)
-                snake.pop()
-
-            # AI eats food
-            if vs_ai:
-                if ate_food_ai:
-                    snake_ai.insert(0, new_head_ai)
-                    score_ai += 1.5
-                    new_level_ai = int(score_ai) // LEVEL_EVERY + 1
-                    if new_level_ai > level_ai:
-                        level_ai = new_level_ai
-                        # Optionally increase FPS for AI too – same speed for fairness
-                        # FPS = min(MAX_FPS, FPS + SPEED_INCREMENT)
-                    # Regenerate food (avoid both snakes)
-                    free_cells = [(x, y) for x in range(GRID_WIDTH)
-                                for y in range(GRID_HEIGHT)
-                                if (x, y) not in snake and (x, y) not in snake_ai]
-
-                    if not free_cells:
-                        game_over = True
-                        winner = "AI"
-                        continue
-                    food = random.choice(free_cells)
-                else:
-                    snake_ai.insert(0, new_head_ai)
-                    snake_ai.pop()
+            
 
             # === Collision Detection ===
             # Check wall collision
@@ -574,6 +597,8 @@ def main():
                 or new_head[1] < 0
                 or new_head[1] >= GRID_HEIGHT
             ):
+                if game_over_sound:
+                    game_over_sound.play()
                 game_over = True
                 winner = "Human (Wall)"
                 continue
@@ -581,6 +606,8 @@ def main():
             # Check self collision (head colliding with body)
             # print(f"snake: {snake[1:]}, new_head: {new_head}")
             if new_head in snake[1:]:
+                if game_over_sound:
+                    game_over_sound.play()
                 game_over = True
                 winner = "Human (Self)"
                 continue
@@ -589,24 +616,32 @@ def main():
             if vs_ai:
                 # Check AI self collision
                 if new_head_ai in snake_ai[1:]:
+                    if game_over_sound:
+                        game_over_sound.play()
                     game_over = True
                     winner = "AI (Self)"
                     continue
 
                 # Check human head vs AI body
                 if new_head in snake_ai:
+                    if game_over_sound:
+                        game_over_sound.play()
                     game_over = True
                     winner = "AI"
                     continue
 
                 # Check AI head vs human body
                 if new_head_ai in snake:
+                    if game_over_sound:
+                        game_over_sound.play()
                     game_over = True
                     winner = "Human"
                     continue
 
                 # Check head-on collision (both heads same cell)
                 if new_head == new_head_ai:
+                    if game_over_sound:
+                        game_over_sound.play()
                     game_over = True
                     winner = "Tie!"
                     continue
@@ -627,7 +662,7 @@ def main():
         if game_over:
             # Use a flag to avoid sending multiple times
             if not game_over_sent:
-                send_score_to_api(player_name, score, level)
+                send_score_to_api(player_name, int(score), level)
                 game_over_sent = True
             show_game_over(screen, font, score, player_name)
         elif paused:
