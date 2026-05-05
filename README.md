@@ -1033,6 +1033,15 @@ For ML / AI Engineer
 - Compare AI strategies - Implement and benchmark different pathfinding algorithms
 ```
 
+## For data scientist 
+```python
+# Add to your project:
+1. ML model for score prediction
+2. Clustering for player segmentation
+3. Time series forecasting
+→ Then apply for Junior Data Scientist!
+```
+
 ## Note
 - Human and AI move at the same speed (same FPS)
 
