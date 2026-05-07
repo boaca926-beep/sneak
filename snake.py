@@ -21,15 +21,15 @@ create_beep_sounds()
 
 # Initialize sound (add this after pygame.init())
 try:
-    eat_sound = pygame.mixer.Sound("eat.wav")
-    game_over_sound = pygame.mixer.Sound("game_over.wav")
+    eat_sound = pygame.mixer.Sound("./music/eat.wav")
+    game_over_sound = pygame.mixer.Sound("./music/game_over.wav")
 except:
     print("Sound files not found, playing without sound")
     eat_sound = None
     game_over_sound = None
 
 # Load and play background music
-bkg_music="background_rock"
+bkg_music=f"./music/background_rock"
 try:
     if os.path.exists(f"{bkg_music}.mp3"):
         pygame.mixer.music.load(f"{bkg_music}.mp3")

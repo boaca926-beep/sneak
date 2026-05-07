@@ -32,12 +32,13 @@ with wave.open("test.wav", 'w') as wav:
 print("✅ Created test.wav")
 
 # Now try to play it
+test_file="./music/background_rock.mp3"#"test.wav"
 try:
-    print("\nAttempting to play test.wav...")
-    sound = pygame.mixer.Sound("test.wav")
+    print(f"\nAttempting to play {test_file}...")
+    sound = pygame.mixer.Sound(f"{test_file}")
     sound.play()
     print("Playing... (you should hear a beep)")
-    time.sleep(1.5)
+    time.sleep(5.5)
     print("✅ Playback complete!")
 except Exception as e:
     print(f"❌ Failed to play: {e}")

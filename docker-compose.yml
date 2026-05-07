@@ -4,20 +4,25 @@ services:
     environment:
       - DISPLAY=${DISPLAY}
       - SDL_VIDEODRIVER=x11          # forces X11 backend
-      - SDL_AUDIODRIVER=dummy        # silences audio warnings
+      - SDL_AUDIODRIVER=pulseaudio        # silences audio warnings
       - ENABLE_DEBUG=${ENABLE_DEBUG}
       - QT_X11_NO_MITSHM=1
       - LIBGL_ALWAYS_SOFTWARE=1
       - GTK_MODULES=
       - NO_AT_BRIDGE=1
+      - PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native
     volumes:
       - .:/app
       - /app/__pycache__
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /etc/machine-id:/etc/machine-id:ro
+      - ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native
+      - ~/.config/pulse/cookie:/root/.config/pulse/cookie:ro
     network_mode: host
     stdin_open: true
     tty: true
+    devices:
+      - /dev/snd:/dev/snd
 
   score-api:
     build: .

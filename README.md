@@ -19,8 +19,100 @@ A classic Snake game built with Python and Pygame featuring **Human vs AI** mode
 - Flask API + SQLite leaderboard (top 10 scores)
 - Auto-refreshing web leaderboard
 - Docker support with X11 forwarding for Linux
+- **🎵 Background music & sound effects** - immersive gaming experience
+
+## 🎵 Audio Features
+
+### Sound Effects
+- **Eating sound** (`eat.wav`) - Plays when snake collects food
+- **Game over sound** (`game_over.wav`) - Plays when game ends
+
+### Background Music
+- **Continuous background music** (`background_rock.mp3`) - Loops throughout gameplay
+- Volume set to 30% by default (adjustable in code)
+- Supports MP3, OGG, and WAV formats
+
+### Audio Configuration
+
+| Setting | Value | Location |
+|---------|-------|----------|
+| Music Volume | 30% | `snake.py` line 37 |
+| Sound Effects Volume | 100% | Pygame mixer default |
+| Audio Driver (Docker) | ALSA or PulseAudio | `docker-compose.yml` |
+
+### Adding Custom Music
+
+1. **Place audio files in the `music/` folder:**
+   ```bash
+   music/
+   ├── eat.wav              # Eating sound effect
+   ├── game_over.wav        # Game over sound effect  
+   └── background_rock.mp3  # Background music
+   ```
+2 **Supported formats:**
+- MP3 (pip install pygame includes MP3 support)
+
+- OGG (recommended for open source)
+
+- WAV (uncompressed, highest quality)
+
+### Docker Audio Setup
+The game supports audio playback in Docker containers with proper configuration:
+
+**For Linux (ALSA)**
+```yaml
+environment:
+  - SDL_AUDIODRIVER=alsa
+devices:
+  - /dev/snd:/dev/snd
+```
+
+**For PulseAudio**
+```yaml
+environment:
+  - SDL_AUDIODRIVER=pulseaudio
+  - PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native
+volumes:
+  - ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native
+```
+
+### 🐛 Troubleshooting Audio
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| **No background music** | Music file missing or wrong path | Ensure `music/background_rock.mp3` (or `.ogg`/`.wav`) exists |
+| **No eating sound effect** | `eat.wav` file missing | Place `eat.wav` in `music/` folder or run `python helper.py` to generate |
+| **No game over sound** | `game_over.wav` file missing | Place `game_over.wav` in `music/` folder or run `python helper.py` to generate |
+| **Typo in file path** | Wrong folder name in code | Change `./musics/` to `./music/` in `snake.py` lines 30 & 34 |
+| **Docker: No sound at all** | Audio driver set to `dummy` | Change `SDL_AUDIODRIVER` from `dummy` to `alsa` in `docker-compose.yml` |
+| **Docker: Permission denied** | Container can't access sound device | Add `devices: - /dev/snd:/dev/snd` to `docker-compose.yml` |
+| **Docker: PulseAudio not working** | PulseAudio socket not mounted | Add volume mount: `${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native` |
+| **MP3 files not playing** | Missing MP3 codec | Convert to OGG format: `ffmpeg -i input.mp3 output.ogg` |
+| **Volume too loud/quiet** | Default volume setting | Adjust `pygame.mixer.music.set_volume(0.3)` in `snake.py` (0.0 to 1.0) |
+| **Sound is distorted** | Sample rate mismatch | Change `pygame.mixer.init(frequency=22050)` instead of 44100 |
+| **No sound on macOS** | SDL audio backend issue | Set environment: `SDL_AUDIODRIVER=coreaudio` |
+| **No sound on Windows (Docker)** | Docker Desktop limitations | Run game locally instead of in Docker container |
+| **Audio lags behind game** | Buffer size too large | Add `pygame.mixer.init(buffer=512)` to reduce latency |
+| **Multiple sounds playing at once** | No channel limiting | Use `pygame.mixer.set_num_channels(8)` to limit concurrent sounds |
+| **Background music stops after game over** | Music not reloaded | Call `pygame.mixer.music.play(-1)` again after restart |
+| **Sound works in local but not Docker** | Host audio not forwarded | Run `pactl info` on host to check PulseAudio, then configure Docker |
+| **"Could not open audio device" error** | Another app using sound device | Close other audio apps or use `SDL_AUDIODRIVER=dummy` to disable sound |
+| **Music plays but no sound effects** | Sound effects not initialized | Ensure `pygame.mixer.Sound()` objects are created after `pygame.mixer.init()` |
+| **Audio works but game crashes** | Audio file corrupted | Replace audio file or convert to different format |
+| **Can't hear anything on Linux host** | ALSA not configured | Run `alsamixer` and ensure channels are not muted |
+
+### Testing Audio
+
+Run the audio test script:
+```bash
+docker-compose run --rm snake-game python test_sound.py
+```
+
+3. Adjust volume in snake.py:
 
 ## 🎯 How to Play
+```python
+pygame.mixer.music.set_volume(0.3)  # 0.0 to 1.0 (30% default)
+```
 
 ### Controls
 | Key | Action |
@@ -937,6 +1029,15 @@ For ML / AI Engineer
 - Model retraining pipeline - Trigger retraining when new scores arrive
 
 - Compare AI strategies - Implement and benchmark different pathfinding algorithms
+```
+
+## For data scientist 
+```python
+# Add to your project:
+1. ML model for score prediction
+2. Clustering for player segmentation
+3. Time series forecasting
+→ Then apply for Junior Data Scientist!
 ```
 
 ## Note
