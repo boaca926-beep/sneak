@@ -1,7 +1,5 @@
 # Snake Game 🐍
 
-# Snake Game 🐍
-
 A classic Snake game built with Python and Pygame featuring **Human vs AI** mode! Control your snake, compete against an AI opponent, eat food to grow longer, and try to achieve the highest score!
 
 ![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)
