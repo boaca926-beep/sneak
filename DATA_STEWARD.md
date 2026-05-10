@@ -127,6 +127,22 @@ python data_governance/steward_dashboard.py
 # Open browser to http://localhost:5001
 ```
 
+## User Cases
+### 1. Failed player_name Check
+```bash
+# Inspect results of all the rules
+uv run steward.py
+```
+INFO:data_governance.data_quality:Executing rule: completeness_player_name
+✅ Ran 1 quality checks
+Rule: completeness_player_name
+Passed: False
+Score: 92.31%
+Message: Quality score: 92.31% (threshold: 95.00%) - 1 records affected
+<p align="center">
+  <img src="figures/name_check.png" alt="Top-10 scores output" width="600">
+</p>
+
 ## 1. Data Quality Rules Engine
 ### Setup
 ```bash
@@ -192,15 +208,15 @@ class QualityResult:
 
 class DataQualityChecker:
     """Main data quality monitoring system"""
-    
+
     def __init__(self, db_path: str = "scores.db"):
         self.db_path = db_path
         self.quality_history_table = "quality_checks_history"
         self._init_history_table()
-        
+
         # Load quality rules
         self.rules = self._load_default_rules()
-        
+
     def _init_history_table(self):
         """Initialize table to store quality check history"""
         conn = sqlite3.connect(self.db_path)
@@ -220,7 +236,7 @@ class DataQualityChecker:
         """)
         conn.commit()
         conn.close()
-    
+
     def _load_default_rules(self) -> List[QualityRule]:
         """Load default data quality rules"""
         rules = [
@@ -330,13 +346,13 @@ class DataQualityChecker:
             )
         ]
         return rules
-    
+
     def load_rules_from_yaml(self, yaml_path: str):
         """Load quality rules from YAML configuration"""
         import yaml
         with open(yaml_path, 'r') as f:
             rules_config = yaml.safe_load(f)
-        
+
         self.rules = []
         for rule_config in rules_config['quality_rules']:
             self.rules.append(QualityRule(
@@ -348,7 +364,7 @@ class DataQualityChecker:
                 threshold=rule_config['threshold'],
                 active=rule_config.get('active', True)
             ))
-    
+
     def execute_rule(self, rule: QualityRule) -> QualityResult:
         """Execute a single quality rule"""
         if not rule.active:
@@ -361,32 +377,32 @@ class DataQualityChecker:
                 message="Rule inactive - skipped",
                 timestamp=datetime.now()
             )
-        
+
         try:
             conn = sqlite3.connect(self.db_path)
             df = pd.read_sql_query(rule.query, conn)
             conn.close()
-            
+
             if len(df) == 0:
                 score = 1.0
                 affected_rows = 0
                 passed = score >= rule.threshold
             else:
                 total = df.iloc[0]['total']
-                invalid = df.iloc[0].get('null_count', df.iloc[0].get('invalid_count', 
+                invalid = df.iloc[0].get('null_count', df.iloc[0].get('invalid_count',
                          df.iloc[0].get('negative_count', df.iloc[0].get('suspicious_increments',
                          df.iloc[0].get('duplicate_count', df.iloc[0].get('old_records',
                          df.iloc[0].get('invalid_length', df.iloc[0].get('high_scores', 0))))))))
-                
+
                 affected_rows = invalid if 'invalid' in locals() else 0
                 valid = total - invalid if total > 0 else 0
                 score = valid / total if total > 0 else 1.0
                 passed = score >= rule.threshold
-            
+
             message = f"Quality score: {score:.2%} (threshold: {rule.threshold:.2%})"
             if not passed:
                 message += f" - {affected_rows} records affected"
-            
+
             return QualityResult(
                 rule_name=rule.name,
                 passed=passed,
@@ -397,7 +413,7 @@ class DataQualityChecker:
                 timestamp=datetime.now(),
                 affected_rows=affected_rows
             )
-            
+
         except Exception as e:
             logger.error(f"Error executing rule {rule.name}: {e}")
             return QualityResult(
@@ -409,41 +425,41 @@ class DataQualityChecker:
                 message=f"Error: {str(e)}",
                 timestamp=datetime.now()
             )
-    
+
     def run_all_checks(self) -> List[QualityResult]:
         """Execute all active quality rules"""
         results = []
-        
+
         for rule in self.rules:
             logger.info(f"Executing rule: {rule.name}")
             result = self.execute_rule(rule)
             results.append(result)
-            
+
             # Store to history
             self._store_result(result)
-            
+
             # Log alert for critical failures
             if not result.passed and result.severity == Severity.CRITICAL.value:
                 self._send_alert(result)
-        
+
         return results
-    
+
     def _store_result(self, result: QualityResult):
         """Store quality check result in history"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(f"""
-            INSERT INTO {self.quality_history_table} 
+            INSERT INTO {self.quality_history_table}
             (rule_name, passed, score, threshold, severity, message, affected_rows, check_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            result.rule_name, result.passed, result.score, 
+            result.rule_name, result.passed, result.score,
             result.threshold, result.severity, result.message,
             result.affected_rows, result.timestamp
         ))
         conn.commit()
         conn.close()
-    
+
     def _send_alert(self, result: QualityResult):
         """Send alert for critical quality failures"""
         # Can integrate with email, Slack, or logging system
@@ -456,16 +472,16 @@ class DataQualityChecker:
         Time: {result.timestamp}
         """
         logger.critical(alert_msg)
-        
+
         # Optionally send to Slack webhook
         # self._send_slack_alert(alert_msg)
-    
+
     def get_quality_summary(self, days: int = 7) -> Dict:
         """Get quality summary for last N days"""
         conn = sqlite3.connect(self.db_path)
-        
+
         query = f"""
-            SELECT 
+            SELECT
                 rule_name,
                 severity,
                 COUNT(*) as total_checks,
@@ -478,12 +494,12 @@ class DataQualityChecker:
             GROUP BY rule_name, severity
             ORDER BY avg_score ASC
         """
-        
+
         df = pd.read_sql_query(query, conn)
         conn.close()
-        
+
         overall_pass_rate = df['passed_checks'].sum() / df['total_checks'].sum() if len(df) > 0 else 0
-        
+
         return {
             'total_rules': len(df),
             'overall_pass_rate': overall_pass_rate,
@@ -491,12 +507,12 @@ class DataQualityChecker:
             'rules_summary': df.to_dict('records'),
             'trend': self._calculate_trend()
         }
-    
+
     def _calculate_trend(self) -> str:
         """Calculate quality trend"""
         conn = sqlite3.connect(self.db_path)
         query = f"""
-            SELECT 
+            SELECT
                 date(check_date) as check_day,
                 AVG(score) as daily_avg_score
             FROM {self.quality_history_table}
@@ -506,7 +522,7 @@ class DataQualityChecker:
         """
         df = pd.read_sql_query(query, conn)
         conn.close()
-        
+
         if len(df) >= 2:
             if df['daily_avg_score'].iloc[-1] > df['daily_avg_score'].iloc[0]:
                 return "improving"
@@ -571,17 +587,17 @@ class DataLineage:
 
 class MetadataManager:
     """Manage data metadata, dictionary, and lineage"""
-    
+
     def __init__(self, db_path: str = "scores.db"):
         self.db_path = db_path
         self.metadata_db = "data_governance_metadata.db"
         self._init_metadata_tables()
-        
+
     def _init_metadata_tables(self):
         """Initialize metadata storage tables"""
         conn = sqlite3.connect(self.metadata_db)
         cursor = conn.cursor()
-        
+
         # Data dictionary table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS data_dictionary (
@@ -598,7 +614,7 @@ class MetadataManager:
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # Lineage tracking
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS data_lineage (
@@ -611,7 +627,7 @@ class MetadataManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # Business glossary
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS business_glossary (
@@ -622,30 +638,30 @@ class MetadataManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         conn.commit()
         conn.close()
-    
+
     def generate_data_dictionary(self) -> Dict:
         """Generate complete data dictionary from scores database"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # Get table info
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scores'")
         tables = cursor.fetchall()
-        
+
         data_dictionary = {}
-        
+
         for table in tables:
             table_name = table[0]
             cursor.execute(f"PRAGMA table_info({table_name})")
             columns = cursor.fetchall()
-            
+
             # Get sample values
             cursor.execute(f"SELECT * FROM {table_name} LIMIT 5")
             samples = cursor.fetchall()
-            
+
             table_dict = {
                 'name': table_name,
                 'description': 'Snake game scores table storing player performance data',
@@ -657,14 +673,14 @@ class MetadataManager:
                 'last_updated': datetime.now(),
                 'columns': []
             }
-            
+
             for col in columns:
                 col_id, col_name, col_type, not_null, default, pk = col
-                
+
                 # Get sample values for this column
                 cursor.execute(f"SELECT DISTINCT {col_name} FROM {table_name} LIMIT 3")
                 sample_vals = [str(row[0]) for row in cursor.fetchall() if row[0] is not None]
-                
+
                 column_dict = {
                     'name': col_name,
                     'data_type': col_type,
@@ -675,17 +691,17 @@ class MetadataManager:
                     'sample_values': sample_vals,
                     'constraints': self._get_column_constraints(col_name, not_null, pk)
                 }
-                
+
                 table_dict['columns'].append(column_dict)
-                
+
                 # Store in metadata DB
                 self._store_column_metadata(table_name, column_dict)
-            
+
             data_dictionary[table_name] = table_dict
-        
+
         conn.close()
         return data_dictionary
-    
+
     def _get_column_description(self, column_name: str) -> str:
         """Get human-readable column description"""
         descriptions = {
@@ -697,7 +713,7 @@ class MetadataManager:
             'deduplicated': 'Flag indicating if this record has been deduplicated by ETL pipeline'
         }
         return descriptions.get(column_name, f'Field containing {column_name} data')
-    
+
     def _get_business_name(self, column_name: str) -> str:
         """Get business-friendly column name"""
         business_names = {
@@ -709,7 +725,7 @@ class MetadataManager:
             'deduplicated': 'Deduplication Status'
         }
         return business_names.get(column_name, column_name.replace('_', ' ').title())
-    
+
     def _get_column_constraints(self, column_name: str, not_null: bool, pk: bool) -> List[str]:
         """Get business constraints for column"""
         constraints = []
@@ -724,14 +740,14 @@ class MetadataManager:
         if column_name == 'timestamp':
             constraints.append('Must be valid datetime, cannot be future dated')
         return constraints
-    
+
     def _store_column_metadata(self, table_name: str, column: Dict):
         """Store column metadata in metadata database"""
         conn = sqlite3.connect(self.metadata_db)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO data_dictionary 
-            (table_name, column_name, data_type, description, business_name, 
+            INSERT OR REPLACE INTO data_dictionary
+            (table_name, column_name, data_type, description, business_name,
              is_nullable, is_primary_key, sample_values, constraints, last_updated)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
@@ -742,7 +758,7 @@ class MetadataManager:
         ))
         conn.commit()
         conn.close()
-    
+
     def define_lineage(self, lineage: DataLineage):
         """Define data lineage for transformation pipelines"""
         conn = sqlite3.connect(self.metadata_db)
@@ -756,7 +772,7 @@ class MetadataManager:
         ))
         conn.commit()
         conn.close()
-    
+
     def get_lineage(self, table_name: str) -> List[Dict]:
         """Get lineage information for a table"""
         conn = sqlite3.connect(self.metadata_db)
@@ -766,10 +782,10 @@ class MetadataManager:
             FROM data_lineage
             WHERE source_table = ? OR target_table = ?
         """, (table_name, table_name))
-        
+
         rows = cursor.fetchall()
         conn.close()
-        
+
         return [
             {
                 'source_table': row[0],
@@ -780,7 +796,7 @@ class MetadataManager:
             }
             for row in rows
         ]
-    
+
     def add_business_term(self, term: str, definition: str, category: str, owner: str):
         """Add term to business glossary"""
         conn = sqlite3.connect(self.metadata_db)
@@ -791,7 +807,7 @@ class MetadataManager:
         """, (term, definition, category, owner))
         conn.commit()
         conn.close()
-    
+
     def get_business_glossary(self) -> List[Dict]:
         """Retrieve all business glossary terms"""
         conn = sqlite3.connect(self.metadata_db)
@@ -799,7 +815,7 @@ class MetadataManager:
         cursor.execute("SELECT term, definition, category, owner, created_at FROM business_glossary")
         rows = cursor.fetchall()
         conn.close()
-        
+
         return [
             {
                 'term': row[0],
@@ -810,35 +826,35 @@ class MetadataManager:
             }
             for row in rows
         ]
-    
+
     def export_metadata(self, format: str = 'json') -> str:
         """Export metadata in JSON or Markdown format"""
         data_dict = self.generate_data_dictionary()
         lineage = self.get_lineage('scores')
         glossary = self.get_business_glossary()
-        
+
         metadata_export = {
             'data_dictionary': data_dict,
             'lineage': lineage,
             'business_glossary': glossary,
             'export_timestamp': datetime.now().isoformat()
         }
-        
+
         if format == 'json':
             output_file = f"metadata_export_{datetime.now().strftime('%Y%m%d')}.json"
             with open(output_file, 'w') as f:
                 json.dump(metadata_export, f, indent=2, default=str)
             return output_file
-        
+
         elif format == 'markdown':
             return self._export_to_markdown(metadata_export)
-        
+
         return json.dumps(metadata_export, indent=2, default=str)
-    
+
     def _export_to_markdown(self, metadata: Dict) -> str:
         """Export metadata as Markdown documentation"""
         md = "# Snake Game Data Governance Documentation\n\n"
-        
+
         # Data Dictionary
         md += "## 📊 Data Dictionary\n\n"
         for table_name, table_info in metadata['data_dictionary'].items():
@@ -847,15 +863,15 @@ class MetadataManager:
             md += f"**Owner:** {table_info['owner']}\n\n"
             md += f"**Update Frequency:** {table_info['update_frequency']}\n\n"
             md += f"**Row Count:** {table_info['row_count']}\n\n"
-            
+
             md += "| Column | Type | Description | Business Name | Constraints |\n"
             md += "|--------|------|-------------|---------------|-------------|\n"
-            
+
             for col in table_info['columns']:
                 constraints = "; ".join(col['constraints'])
                 md += f"| {col['name']} | {col['data_type']} | {col['description']} | {col['business_name']} | {constraints} |\n"
             md += "\n---\n\n"
-        
+
         # Lineage
         md += "## 🔄 Data Lineage\n\n"
         for lineage in metadata['lineage']:
@@ -863,18 +879,18 @@ class MetadataManager:
             md += f"- Transformation: {lineage['transformation']}\n"
             md += f"- Frequency: {lineage['frequency']}\n"
             md += f"- Dependencies: {', '.join(lineage['dependencies'])}\n\n"
-        
+
         # Business Glossary
         md += "## 📖 Business Glossary\n\n"
         md += "| Term | Definition | Category | Owner |\n"
         md += "|------|------------|----------|-------|\n"
         for term in metadata['business_glossary']:
             md += f"| {term['term']} | {term['definition']} | {term['category']} | {term['owner']} |\n"
-        
+
         output_file = f"data_governance_docs_{datetime.now().strftime('%Y%m%d')}.md"
         with open(output_file, 'w') as f:
             f.write(md)
-        
+
         return output_file
 ```
 
@@ -899,18 +915,18 @@ logger = logging.getLogger(__name__)
 
 class DataProfiler:
     """Profile data and detect anomalies"""
-    
+
     def __init__(self, db_path: str = "scores.db"):
         self.db_path = db_path
         self.profile_history_table = "data_profiles"
         self.anomaly_table = "detected_anomalies"
         self._init_tables()
-    
+
     def _init_tables(self):
         """Initialize profiling and anomaly tables"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.profile_history_table} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -927,7 +943,7 @@ class DataProfiler:
                 top_players TEXT
             )
         """)
-        
+
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.anomaly_table} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -939,17 +955,17 @@ class DataProfiler:
                 resolution_status TEXT DEFAULT 'open'
             )
         """)
-        
+
         conn.commit()
         conn.close()
-    
+
     def full_profile(self) -> Dict:
         """Generate complete data profile"""
         conn = sqlite3.connect(self.db_path)
-        
+
         # Basic statistics
         df = pd.read_sql_query("SELECT * FROM scores", conn)
-        
+
         profile = {
             'timestamp': datetime.now().isoformat(),
             'basic_stats': self._basic_statistics(df),
@@ -959,13 +975,13 @@ class DataProfiler:
             'data_quality_metrics': self._data_quality_metrics(df),
             'correlations': self._calculate_correlations(df)
         }
-        
+
         # Store profile
         self._store_profile(profile)
         conn.close()
-        
+
         return profile
-    
+
     def _basic_statistics(self, df: pd.DataFrame) -> Dict:
         """Calculate basic statistical metrics"""
         return {
@@ -992,25 +1008,25 @@ class DataProfiler:
                 'timestamp': int(df['timestamp'].isna().sum())
             }
         }
-    
+
     def _score_distribution(self, df: pd.DataFrame) -> Dict:
         """Analyze score distribution"""
         scores = df['score']
-        
+
         # Create bins
         bins = [0, 50, 100, 200, 500, 1000, 5000, 10000]
         labels = ['0-50', '51-100', '101-200', '201-500', '501-1000', '1001-5000', '5001+']
-        
+
         df['score_range'] = pd.cut(scores, bins=bins, labels=labels)
         distribution = df['score_range'].value_counts().to_dict()
-        
+
         # Detect outliers using IQR method
         Q1 = scores.quantile(0.25)
         Q3 = scores.quantile(0.75)
         IQR = Q3 - Q1
         outlier_threshold = Q3 + 1.5 * IQR
         outliers = scores[scores > outlier_threshold]
-        
+
         return {
             'score_ranges': {str(k): int(v) for k, v in distribution.items()},
             'outliers': {
@@ -1021,11 +1037,11 @@ class DataProfiler:
             'skewness': float(scores.skew()) if len(df) > 1 else 0,
             'kurtosis': float(scores.kurtosis()) if len(df) > 1 else 0
         }
-    
+
     def _temporal_analysis(self, conn: sqlite3.Connection) -> Dict:
         """Analyze temporal patterns"""
         query = """
-            SELECT 
+            SELECT
                 strftime('%Y-%m-%d', timestamp) as game_date,
                 strftime('%H:00', timestamp) as game_hour,
                 COUNT(*) as games_played,
@@ -1035,25 +1051,25 @@ class DataProfiler:
             GROUP BY game_date, game_hour
             ORDER BY game_date DESC
         """
-        
+
         df = pd.read_sql_query(query, conn)
-        
+
         if len(df) == 0:
             return {}
-        
+
         # Peak hours
         hourly_activity = df.groupby('game_hour')['games_played'].sum().sort_values(ascending=False)
-        
+
         # Recent trends (last 7 days)
         recent = df[df['game_date'] >= (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')]
-        
+
         return {
             'peak_hours': hourly_activity.head(5).to_dict(),
             'total_games_last_7_days': len(recent),
             'avg_score_trend': recent.groupby('game_date')['avg_score'].mean().tail(7).to_dict(),
             'best_day_of_week': self._analyze_day_of_week(df)
         }
-    
+
     def _analyze_day_of_week(self, df: pd.DataFrame) -> Dict:
         """Analyze patterns by day of week"""
         df['weekday'] = pd.to_datetime(df['game_date']).dt.day_name()
@@ -1061,28 +1077,28 @@ class DataProfiler:
             'games_played': 'sum',
             'avg_score': 'mean'
         }).to_dict()
-        
+
         # Find best day
         if len(weekday_stats['games_played']) > 0:
             best_day = max(weekday_stats['games_played'], key=weekday_stats['games_played'].get)
         else:
             best_day = None
-            
+
         return {
             'stats': weekday_stats,
             'most_active_day': best_day
         }
-    
+
     def _player_analysis(self, df: pd.DataFrame) -> Dict:
         """Analyze player behavior patterns"""
         # Top players by score
         top_players = df.groupby('player_name').agg({
             'score': ['mean', 'max', 'count']
         }).round(2)
-        
+
         top_players.columns = ['avg_score', 'max_score', 'games_played']
         top_players = top_players.sort_values('max_score', ascending=False).head(10)
-        
+
         # Player retention
         player_frequency = df.groupby('player_name').size()
         return {
@@ -1096,7 +1112,7 @@ class DataProfiler:
             },
             'average_games_per_player': float(df.groupby('player_name').size().mean())
         }
-    
+
     def _data_quality_metrics(self, df: pd.DataFrame) -> Dict:
         """Calculate data quality metrics"""
         return {
@@ -1113,37 +1129,37 @@ class DataProfiler:
                 'future_dates': len(df[df['timestamp'] > datetime.now()])
             }
         }
-    
+
     def _calculate_correlations(self, df: pd.DataFrame) -> Dict:
         """Calculate correlations between variables"""
         if len(df) == 0:
             return {}
-        
+
         # Create features for correlation
         df['score_log'] = np.log1p(df['score'])
         df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
         df['day_of_week'] = pd.to_datetime(df['timestamp']).dt.dayofweek
-        
+
         correlations = {
             'score_vs_hour': float(df['score'].corr(df['hour'])) if len(df) > 1 else 0,
             'score_vs_day_of_week': float(df['score'].corr(df['day_of_week'])) if len(df) > 1 else 0
         }
-        
+
         return correlations
-    
+
     def detect_anomalies(self) -> List[Dict]:
         """Detect anomalies in the data"""
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql_query("SELECT * FROM scores", conn)
         conn.close()
-        
+
         anomalies = []
-        
+
         # 1. Score anomaly (Z-score > 3)
         if len(df) > 1:
             z_scores = np.abs(stats.zscore(df['score']))
             score_anomalies = df[z_scores > 3]
-            
+
             if len(score_anomalies) > 0:
                 anomalies.append({
                     'type': 'score_outlier',
@@ -1152,14 +1168,14 @@ class DataProfiler:
                     'affected_records': score_anomalies[['player_name', 'score', 'timestamp']].to_dict('records'),
                     'suggestion': 'Review if these scores are legitimate or indicate cheating'
                 })
-        
+
         # 2. Rapid score increase anomaly
         for player in df['player_name'].unique():
             player_data = df[df['player_name'] == player].sort_values('timestamp')
             if len(player_data) > 1:
                 score_diffs = player_data['score'].diff()
                 rapid_increases = score_diffs[score_diffs > 100]  # More than 100 points jump
-                
+
                 if len(rapid_increases) > 0:
                     anomalies.append({
                         'type': 'rapid_score_increase',
@@ -1168,11 +1184,11 @@ class DataProfiler:
                         'affected_records': player_data[score_diffs > 100][['timestamp', 'score']].to_dict('records'),
                         'suggestion': 'May indicate game exploit or cheating'
                     })
-        
+
         # 3. Frequency anomaly (too many games in short time)
         hourly_games = df.set_index('timestamp').resample('1H').size()
         high_frequency = hourly_games[hourly_games > hourly_games.quantile(0.99)] if len(hourly_games) > 0 else []
-        
+
         if len(high_frequency) > 0:
             anomalies.append({
                 'type': 'high_frequency',
@@ -1181,7 +1197,7 @@ class DataProfiler:
                 'affected_records': high_frequency.to_dict(),
                 'suggestion': 'Check if this is normal traffic or bot activity'
             })
-        
+
         # 4. Impossible scores
         impossible_scores = df[df['score'] > 10000]
         if len(impossible_scores) > 0:
@@ -1192,22 +1208,22 @@ class DataProfiler:
                 'affected_records': impossible_scores[['player_name', 'score', 'timestamp']].to_dict('records'),
                 'suggestion': 'Flag these as cheating - max possible score needs review'
             })
-        
+
         # Store anomalies
         self._store_anomalies(anomalies)
-        
+
         return anomalies
-    
+
     def _store_profile(self, profile: Dict):
         """Store profile snapshot"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         basic_stats = profile['basic_stats']
-        
+
         cursor.execute(f"""
             INSERT INTO {self.profile_history_table}
-            (total_records, unique_players, avg_score, median_score, std_dev_score, 
+            (total_records, unique_players, avg_score, median_score, std_dev_score,
              min_score, max_score, score_percentiles, hourly_activity, top_players)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
@@ -1222,18 +1238,18 @@ class DataProfiler:
             json.dumps(profile.get('temporal_patterns', {})),
             json.dumps(profile.get('player_behavior', {}))
         ))
-        
+
         conn.commit()
         conn.close()
-    
+
     def _store_anomalies(self, anomalies: List[Dict]):
         """Store detected anomalies"""
         if not anomalies:
             return
-            
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         for anomaly in anomalies:
             cursor.execute(f"""
                 INSERT INTO {self.anomaly_table}
@@ -1246,26 +1262,26 @@ class DataProfiler:
                 json.dumps(anomaly['affected_records']),
                 'open'
             ))
-        
+
         conn.commit()
         conn.close()
-    
+
     def get_profile_summary(self) -> Dict:
         """Get latest profile summary"""
         conn = sqlite3.connect(self.db_path)
-        
+
         query = f"""
             SELECT * FROM {self.profile_history_table}
             ORDER BY profile_date DESC
             LIMIT 1
         """
-        
+
         df = pd.read_sql_query(query, conn)
         conn.close()
-        
+
         if len(df) == 0:
             return {}
-        
+
         return df.iloc[0].to_dict()
 ```
 
@@ -1280,11 +1296,11 @@ quality_rules:
     threshold: 0.95
     active: true
     query: |
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN player_name IS NULL OR player_name = '' THEN 1 ELSE 0 END) as null_count
       FROM scores
-  
+
   - name: valid_score_range
     description: "Scores should be between 0 and 10000"
     severity: warning
@@ -1292,11 +1308,11 @@ quality_rules:
     threshold: 0.99
     active: true
     query: |
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN score < 0 OR score > 10000 THEN 1 ELSE 0 END) as invalid_count
       FROM scores
-  
+
   - name: score_increment_consistency
     description: "Score should increment by 1.5 (no cheating)"
     severity: warning
@@ -1304,11 +1320,11 @@ quality_rules:
     threshold: 0.95
     active: true
     query: |
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN MOD(score, 1.5) != 0 THEN 1 ELSE 0 END) as invalid_increment
       FROM scores
-  
+
   - name: timestamp_validity
     description: "Timestamps should not be in the future"
     severity: critical
@@ -1316,11 +1332,11 @@ quality_rules:
     threshold: 1.0
     active: true
     query: |
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN timestamp > datetime('now') THEN 1 ELSE 0 END) as future_dates
       FROM scores
-  
+
   - name: player_name_format
     description: "Player names should only contain alphanumeric characters"
     severity: warning
@@ -1328,11 +1344,11 @@ quality_rules:
     threshold: 0.98
     active: true
     query: |
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN player_name NOT GLOB '[A-Za-z0-9]*' THEN 1 ELSE 0 END) as invalid_names
       FROM scores
-  
+
   - name: score_reasonableness
     description: "Average scores should be within reasonable range"
     severity: info
@@ -1340,7 +1356,7 @@ quality_rules:
     threshold: 0.90
     active: true
     query: |
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN score > 200 AND score < 10 THEN 1 ELSE 0 END) as unreasonable_scores
       FROM scores
@@ -1406,11 +1422,11 @@ def run_quality_checks():
 def quality_history():
     """Get quality check history"""
     days = request.args.get('days', 7, type=int)
-    
+
     conn = sqlite3.connect('scores.db')
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT 
+        SELECT
             check_date,
             rule_name,
             passed,
@@ -1420,10 +1436,10 @@ def quality_history():
         WHERE check_date >= datetime('now', '-? days')
         ORDER BY check_date DESC
     """, (days,))
-    
+
     rows = cursor.fetchall()
     conn.close()
-    
+
     history = []
     for row in rows:
         history.append({
@@ -1433,7 +1449,7 @@ def quality_history():
             'score': row[3],
             'severity': row[4]
         })
-    
+
     return jsonify(history)
 
 @app.route('/api/profile/current')
@@ -1446,7 +1462,7 @@ def current_profile():
 def get_anomalies():
     """Get detected anomalies"""
     anomalies = profiler.detect_anomalies()
-    
+
     # Also get unresolved anomalies from database
     conn = sqlite3.connect('scores.db')
     cursor = conn.cursor()
@@ -1456,10 +1472,10 @@ def get_anomalies():
         WHERE resolution_status = 'open'
         ORDER BY detection_date DESC
     """)
-    
+
     rows = cursor.fetchall()
     conn.close()
-    
+
     stored_anomalies = []
     for row in rows:
         stored_anomalies.append({
@@ -1470,7 +1486,7 @@ def get_anomalies():
             'detected_at': row[4],
             'status': row[5]
         })
-    
+
     return jsonify({
         'new_anomalies': anomalies,
         'existing_anomalies': stored_anomalies
@@ -1488,7 +1504,7 @@ def resolve_anomaly(anomaly_id):
     """, (anomaly_id,))
     conn.commit()
     conn.close()
-    
+
     return jsonify({'status': 'resolved'})
 
 @app.route('/api/metadata/dictionary')
@@ -1523,33 +1539,33 @@ def export_metadata():
 def dashboard_stats():
     """Get dashboard statistics"""
     conn = sqlite3.connect('scores.db')
-    
+
     # Overall stats
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM scores")
     total_records = cursor.fetchone()[0]
-    
+
     cursor.execute("SELECT COUNT(DISTINCT player_name) FROM scores")
     unique_players = cursor.fetchone()[0]
-    
+
     cursor.execute("SELECT AVG(score) FROM scores")
     avg_score = cursor.fetchone()[0] or 0
-    
+
     cursor.execute("""
-        SELECT COUNT(*) FROM quality_checks_history 
+        SELECT COUNT(*) FROM quality_checks_history
         WHERE passed = 0 AND severity = 'critical'
         AND check_date >= datetime('now', '-1 day')
     """)
     critical_failures = cursor.fetchone()[0]
-    
+
     cursor.execute("""
-        SELECT COUNT(*) FROM detected_anomalies 
+        SELECT COUNT(*) FROM detected_anomalies
         WHERE resolution_status = 'open'
     """)
     open_anomalies = cursor.fetchone()[0]
-    
+
     conn.close()
-    
+
     return jsonify({
         'total_records': total_records,
         'unique_players': unique_players,
@@ -1584,7 +1600,7 @@ if __name__ == '__main__':
         category="Data Quality",
         owner="Security Team"
     )
-    
+
     # Define data lineage
     from metadata_manager import DataLineage
     lineage = DataLineage(
@@ -1595,15 +1611,15 @@ if __name__ == '__main__':
         dependencies=["scores table must be available"]
     )
     metadata_mgr.define_lineage(lineage)
-    
+
     # Run initial quality checks
     print("Running initial data quality checks...")
     quality_checker.run_all_checks()
-    
+
     # Run profiling
     print("Generating data profile...")
     profiler.full_profile()
-    
+
     # Start dashboard
     print("\n" + "="*50)
     print("📊 Data Steward Dashboard Running!")
@@ -1618,7 +1634,7 @@ if __name__ == '__main__':
     print("  - /api/metadata/dictionary")
     print("  - /api/dashboard/stats")
     print("="*50)
-    
+
     app.run(debug=True, port=5001)
 ```
 
@@ -1636,19 +1652,19 @@ if __name__ == '__main__':
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
         }
-        
+
         .header {
             background: white;
             border-radius: 15px;
@@ -1656,25 +1672,25 @@ if __name__ == '__main__':
             margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        
+
         .header h1 {
             color: #333;
             font-size: 28px;
             margin-bottom: 10px;
         }
-        
+
         .header p {
             color: #666;
             font-size: 14px;
         }
-        
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 20px;
         }
-        
+
         .stat-card {
             background: white;
             border-radius: 10px;
@@ -1683,27 +1699,27 @@ if __name__ == '__main__':
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             transition: transform 0.3s;
         }
-        
+
         .stat-card:hover {
             transform: translateY(-5px);
         }
-        
+
         .stat-value {
             font-size: 32px;
             font-weight: bold;
             color: #667eea;
             margin-bottom: 5px;
         }
-        
+
         .stat-label {
             color: #666;
             font-size: 14px;
         }
-        
+
         .stat-critical {
             color: #e74c3c;
         }
-        
+
         .dashboard-section {
             background: white;
             border-radius: 15px;
@@ -1711,7 +1727,7 @@ if __name__ == '__main__':
             margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        
+
         .section-title {
             font-size: 20px;
             font-weight: bold;
@@ -1720,41 +1736,41 @@ if __name__ == '__main__':
             border-left: 4px solid #667eea;
             padding-left: 12px;
         }
-        
+
         .quality-metrics {
             display: grid;
             gap: 15px;
         }
-        
+
         .metric {
             background: #f8f9fa;
             border-radius: 8px;
             padding: 15px;
         }
-        
+
         .metric-header {
             display: flex;
             justify-content: space-between;
             margin-bottom: 10px;
         }
-        
+
         .metric-name {
             font-weight: 600;
             color: #333;
         }
-        
+
         .metric-score {
             font-weight: bold;
         }
-        
+
         .metric-pass {
             color: #27ae60;
         }
-        
+
         .metric-fail {
             color: #e74c3c;
         }
-        
+
         .progress-bar {
             background: #e0e0e0;
             height: 8px;
@@ -1762,25 +1778,25 @@ if __name__ == '__main__':
             overflow: hidden;
             margin-top: 8px;
         }
-        
+
         .progress-fill {
             background: #27ae60;
             height: 100%;
             transition: width 0.3s;
         }
-        
+
         .progress-fill.warning {
             background: #f39c12;
         }
-        
+
         .progress-fill.critical {
             background: #e74c3c;
         }
-        
+
         .anomaly-list {
             list-style: none;
         }
-        
+
         .anomaly-item {
             background: #fff3cd;
             border-left: 4px solid #ffc107;
@@ -1788,22 +1804,22 @@ if __name__ == '__main__':
             margin-bottom: 10px;
             border-radius: 5px;
         }
-        
+
         .anomaly-critical {
             background: #f8d7da;
             border-left-color: #dc3545;
         }
-        
+
         .anomaly-warning {
             background: #fff3cd;
             border-left-color: #ffc107;
         }
-        
+
         .anomaly-info {
             background: #d1ecf1;
             border-left-color: #17a2b8;
         }
-        
+
         .button {
             background: #667eea;
             color: white;
@@ -1815,18 +1831,18 @@ if __name__ == '__main__':
             margin-right: 10px;
             margin-bottom: 10px;
         }
-        
+
         .button:hover {
             background: #5a67d8;
         }
-        
+
         .tabs {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
             border-bottom: 2px solid #e0e0e0;
         }
-        
+
         .tab {
             padding: 10px 20px;
             cursor: pointer;
@@ -1835,37 +1851,37 @@ if __name__ == '__main__':
             font-size: 16px;
             color: #666;
         }
-        
+
         .tab.active {
             color: #667eea;
             border-bottom: 2px solid #667eea;
             margin-bottom: -2px;
         }
-        
+
         .tab-content {
             display: none;
         }
-        
+
         .tab-content.active {
             display: block;
         }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
-        
+
         th, td {
             padding: 10px;
             text-align: left;
             border-bottom: 1px solid #e0e0e0;
         }
-        
+
         th {
             background: #f8f9fa;
             font-weight: 600;
         }
-        
+
         .badge {
             display: inline-block;
             padding: 3px 8px;
@@ -1873,22 +1889,22 @@ if __name__ == '__main__':
             font-size: 12px;
             font-weight: 600;
         }
-        
+
         .badge-pass {
             background: #d4edda;
             color: #155724;
         }
-        
+
         .badge-fail {
             background: #f8d7da;
             color: #721c24;
         }
-        
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+
         .loading {
             display: inline-block;
             width: 20px;
@@ -1898,44 +1914,44 @@ if __name__ == '__main__':
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-        
+
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 10px;
             }
-            
+
             .stat-value {
                 font-size: 24px;
             }
-            
+
             .tabs {
                 flex-wrap: wrap;
             }
-            
+
             .tab {
                 padding: 8px 12px;
                 font-size: 14px;
             }
-            
+
             table {
                 font-size: 12px;
             }
-            
+
             th, td {
                 padding: 6px;
             }
         }
-        
+
         @media (max-width: 480px) {
             body {
                 padding: 10px;
             }
-            
+
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .button {
                 width: 100%;
                 margin-bottom: 10px;
@@ -1952,7 +1968,7 @@ if __name__ == '__main__':
             <button class="button" onclick="runQualityChecks()">✅ Run Quality Checks</button>
             <button class="button" onclick="exportMetadata()">📄 Export Metadata</button>
         </div>
-        
+
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card">
                 <div class="stat-value" id="totalRecords">-</div>
@@ -1975,7 +1991,7 @@ if __name__ == '__main__':
                 <div class="stat-label">Open Anomalies</div>
             </div>
         </div>
-        
+
         <div class="tabs">
             <button class="tab active" onclick="switchTab('quality')">📊 Data Quality</button>
             <button class="tab" onclick="switchTab('profile')">📈 Data Profile</button>
@@ -1983,38 +1999,38 @@ if __name__ == '__main__':
             <button class="tab" onclick="switchTab('metadata')">📚 Metadata</button>
             <button class="tab" onclick="switchTab('lineage')">🔄 Lineage</button>
         </div>
-        
+
         <!-- Quality Tab -->
         <div id="quality-tab" class="tab-content active">
             <div class="dashboard-section">
                 <div class="section-title">Quality Overview</div>
                 <div id="qualitySummary"></div>
             </div>
-            
+
             <div class="dashboard-section">
                 <div class="section-title">Quality Rules History</div>
                 <div id="qualityHistory"></div>
             </div>
         </div>
-        
+
         <!-- Profile Tab -->
         <div id="profile-tab" class="tab-content">
             <div class="dashboard-section">
                 <div class="section-title">Score Distribution</div>
                 <div id="scoreDistribution"></div>
             </div>
-            
+
             <div class="dashboard-section">
                 <div class="section-title">Temporal Patterns</div>
                 <div id="temporalPatterns"></div>
             </div>
-            
+
             <div class="dashboard-section">
                 <div class="section-title">Top Players</div>
                 <div id="topPlayers"></div>
             </div>
         </div>
-        
+
         <!-- Anomalies Tab -->
         <div id="anomalies-tab" class="tab-content">
             <div class="dashboard-section">
@@ -2022,20 +2038,20 @@ if __name__ == '__main__':
                 <div id="anomaliesList"></div>
             </div>
         </div>
-        
+
         <!-- Metadata Tab -->
         <div id="metadata-tab" class="tab-content">
             <div class="dashboard-section">
                 <div class="section-title">Data Dictionary</div>
                 <div id="dataDictionary"></div>
             </div>
-            
+
             <div class="dashboard-section">
                 <div class="section-title">Business Glossary</div>
                 <div id="businessGlossary"></div>
             </div>
         </div>
-        
+
         <!-- Lineage Tab -->
         <div id="lineage-tab" class="tab-content">
             <div class="dashboard-section">
@@ -2044,18 +2060,18 @@ if __name__ == '__main__':
             </div>
         </div>
     </div>
-    
+
     <script>
         // Tab switching function
         function switchTab(tabName) {
             // Update tabs
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             event.target.classList.add('active');
-            
+
             // Update content
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById(`${tabName}-tab`).classList.add('active');
-            
+
             // Load tab data based on selection
             if (tabName === 'quality') loadQualityData();
             else if (tabName === 'profile') loadProfileData();
@@ -2063,7 +2079,7 @@ if __name__ == '__main__':
             else if (tabName === 'metadata') loadMetadata();
             else if (tabName === 'lineage') loadLineage();
         }
-        
+
         // Refresh all dashboard data
         async function refreshAll() {
             showLoading('statsGrid');
@@ -2075,7 +2091,7 @@ if __name__ == '__main__':
             await loadLineage();
             hideLoading('statsGrid');
         }
-        
+
         // Show loading indicator
         function showLoading(elementId) {
             const element = document.getElementById(elementId);
@@ -2083,7 +2099,7 @@ if __name__ == '__main__':
                 element.style.opacity = '0.5';
             }
         }
-        
+
         // Hide loading indicator
         function hideLoading(elementId) {
             const element = document.getElementById(elementId);
@@ -2091,13 +2107,13 @@ if __name__ == '__main__':
                 element.style.opacity = '1';
             }
         }
-        
+
         // Load dashboard statistics
         async function loadDashboardStats() {
             try {
                 const response = await fetch('/api/dashboard/stats');
                 const data = await response.json();
-                
+
                 document.getElementById('totalRecords').textContent = data.total_records || 0;
                 document.getElementById('uniquePlayers').textContent = data.unique_players || 0;
                 document.getElementById('avgScore').textContent = data.average_score || 0;
@@ -2108,7 +2124,7 @@ if __name__ == '__main__':
                 setErrorState('statsGrid');
             }
         }
-        
+
         // Set error state for elements
         function setErrorState(elementId) {
             const element = document.getElementById(elementId);
@@ -2119,14 +2135,14 @@ if __name__ == '__main__':
                 }
             }
         }
-        
+
         // Load quality data
         async function loadQualityData() {
             try {
                 // Load summary
                 const summaryResp = await fetch('/api/quality/summary');
                 const summary = await summaryResp.json();
-                
+
                 const overallPassRate = summary.overall_pass_rate || 0;
                 const qualityHtml = `
                     <div class="quality-metrics">
@@ -2138,7 +2154,7 @@ if __name__ == '__main__':
                                 </span>
                             </div>
                             <div class="progress-bar">
-                                <div class="progress-fill ${overallPassRate < 0.7 ? 'critical' : (overallPassRate < 0.9 ? 'warning' : '')}" 
+                                <div class="progress-fill ${overallPassRate < 0.7 ? 'critical' : (overallPassRate < 0.9 ? 'warning' : '')}"
                                      style="width: ${overallPassRate * 100}%"></div>
                             </div>
                             <div style="margin-top: 10px; font-size: 14px; color: #666;">
@@ -2147,13 +2163,13 @@ if __name__ == '__main__':
                         </div>
                     </div>
                 `;
-                
+
                 document.getElementById('qualitySummary').innerHTML = qualityHtml;
-                
+
                 // Load history
                 const historyResp = await fetch('/api/quality/history?days=7');
                 const history = await historyResp.json();
-                
+
                 if (history && history.length > 0) {
                     let historyHtml = '<table><thead><tr><th>Timestamp</th><th>Rule</th><th>Status</th><th>Score</th><th>Severity</th></tr></thead><tbody>';
                     for (const check of history.slice(0, 20)) {
@@ -2172,20 +2188,20 @@ if __name__ == '__main__':
                 } else {
                     document.getElementById('qualityHistory').innerHTML = '<p>No quality history available. Run quality checks to see data.</p>';
                 }
-                
+
             } catch (error) {
                 console.error('Error loading quality data:', error);
                 document.getElementById('qualitySummary').innerHTML = '<p>Error loading quality data. Make sure the dashboard server is running.</p>';
                 document.getElementById('qualityHistory').innerHTML = '<p>Error loading quality history.</p>';
             }
         }
-        
+
         // Load profile data
         async function loadProfileData() {
             try {
                 const response = await fetch('/api/profile/current');
                 const profile = await response.json();
-                
+
                 // Score distribution
                 let distHtml = '<ul>';
                 if (profile.score_distribution && profile.score_distribution.score_ranges) {
@@ -2198,7 +2214,7 @@ if __name__ == '__main__':
                 distHtml += `<li><strong>Outliers</strong>: ${profile.score_distribution?.outliers?.count || 0} scores (${profile.score_distribution?.outliers?.percentage?.toFixed(1) || 0}%)</li>`;
                 distHtml += '</ul>';
                 document.getElementById('scoreDistribution').innerHTML = distHtml;
-                
+
                 // Temporal patterns
                 let temporalHtml = '';
                 if (profile.temporal_patterns && Object.keys(profile.temporal_patterns).length > 0) {
@@ -2209,7 +2225,7 @@ if __name__ == '__main__':
                     }
                     temporalHtml += `</ul>`;
                     temporalHtml += `<p><strong>Total Games (Last 7 days):</strong> ${profile.temporal_patterns.total_games_last_7_days || 0}</p>`;
-                    
+
                     const avgScoreTrend = profile.temporal_patterns.avg_score_trend || {};
                     if (Object.keys(avgScoreTrend).length > 0) {
                         temporalHtml += `<p><strong>Avg Score Trend (Last 7 days):</strong></p><ul>`;
@@ -2222,7 +2238,7 @@ if __name__ == '__main__':
                     temporalHtml = '<p>Not enough data for temporal analysis. Play more games!</p>';
                 }
                 document.getElementById('temporalPatterns').innerHTML = temporalHtml;
-                
+
                 // Top players
                 let playersHtml = '<table><thead><tr><th>Player</th><th>Avg Score</th><th>Max Score</th><th>Games</th></tr></thead><tbody>';
                 if (profile.player_behavior && profile.player_behavior.top_performers) {
@@ -2242,7 +2258,7 @@ if __name__ == '__main__':
                 }
                 playersHtml += '</tbody></table>';
                 document.getElementById('topPlayers').innerHTML = playersHtml;
-                
+
             } catch (error) {
                 console.error('Error loading profile data:', error);
                 document.getElementById('scoreDistribution').innerHTML = '<p>Error loading profile data</p>';
@@ -2250,15 +2266,15 @@ if __name__ == '__main__':
                 document.getElementById('topPlayers').innerHTML = '<p>Error loading player data</p>';
             }
         }
-        
+
         // Load anomalies
         async function loadAnomalies() {
             try {
                 const response = await fetch('/api/profile/anomalies');
                 const data = await response.json();
-                
+
                 let anomaliesHtml = '<div class="anomaly-list">';
-                
+
                 // New anomalies from real-time detection
                 if (data.new_anomalies && data.new_anomalies.length > 0) {
                     anomaliesHtml += '<h3>🚨 Newly Detected Anomalies</h3>';
@@ -2272,7 +2288,7 @@ if __name__ == '__main__':
                         `;
                     }
                 }
-                
+
                 // Existing anomalies from database
                 if (data.existing_anomalies && data.existing_anomalies.length > 0) {
                     anomaliesHtml += '<h3>📋 Open Anomalies</h3>';
@@ -2287,21 +2303,21 @@ if __name__ == '__main__':
                         `;
                     }
                 }
-                
-                if ((!data.new_anomalies || data.new_anomalies.length === 0) && 
+
+                if ((!data.new_anomalies || data.new_anomalies.length === 0) &&
                     (!data.existing_anomalies || data.existing_anomalies.length === 0)) {
                     anomaliesHtml += '<p>✅ No anomalies detected. Data quality looks good!</p>';
                 }
-                
+
                 anomaliesHtml += '</div>';
                 document.getElementById('anomaliesList').innerHTML = anomaliesHtml;
-                
+
             } catch (error) {
                 console.error('Error loading anomalies:', error);
                 document.getElementById('anomaliesList').innerHTML = '<p>Error loading anomalies. Make sure the profiler is running.</p>';
             }
         }
-        
+
         // Resolve anomaly
         async function resolveAnomaly(anomalyId) {
             try {
@@ -2318,14 +2334,14 @@ if __name__ == '__main__':
                 showNotification('Error resolving anomaly', 'error');
             }
         }
-        
+
         // Load metadata
         async function loadMetadata() {
             try {
                 // Load data dictionary
                 const dictResp = await fetch('/api/metadata/dictionary');
                 const dictionary = await dictResp.json();
-                
+
                 let dictHtml = '';
                 for (const [tableName, tableInfo] of Object.entries(dictionary)) {
                     dictHtml += `<h3>📊 ${tableInfo.business_name} (${tableName})</h3>`;
@@ -2334,7 +2350,7 @@ if __name__ == '__main__':
                     dictHtml += `<p><strong>Rows:</strong> ${tableInfo.row_count}</p>`;
                     dictHtml += `<p><strong>Update Frequency:</strong> ${tableInfo.update_frequency}</p>`;
                     dictHtml += `<table><thead><tr><th>Column</th><th>Type</th><th>Description</th><th>Constraints</th></tr></thead><tbody>`;
-                    
+
                     for (const col of tableInfo.columns) {
                         dictHtml += `
                             <tr>
@@ -2348,11 +2364,11 @@ if __name__ == '__main__':
                     dictHtml += `</tbody></table><br>`;
                 }
                 document.getElementById('dataDictionary').innerHTML = dictHtml || '<p>No data dictionary available. Generate one by playing the game first.</p>';
-                
+
                 // Load business glossary
                 const glossaryResp = await fetch('/api/metadata/glossary');
                 const glossary = await glossaryResp.json();
-                
+
                 if (glossary && glossary.length > 0) {
                     let glossaryHtml = '<table><thead><tr><th>Term</th><th>Definition</th><th>Category</th><th>Owner</th></tr></thead><tbody>';
                     for (const term of glossary) {
@@ -2370,20 +2386,20 @@ if __name__ == '__main__':
                 } else {
                     document.getElementById('businessGlossary').innerHTML = '<p>No business glossary terms defined. Add terms using metadata_manager.add_business_term()</p>';
                 }
-                
+
             } catch (error) {
                 console.error('Error loading metadata:', error);
                 document.getElementById('dataDictionary').innerHTML = '<p>Error loading data dictionary</p>';
                 document.getElementById('businessGlossary').innerHTML = '<p>Error loading business glossary</p>';
             }
         }
-        
+
         // Load lineage
         async function loadLineage() {
             try {
                 const response = await fetch('/api/metadata/lineage');
                 const lineage = await response.json();
-                
+
                 let lineageHtml = '';
                 if (lineage && lineage.length > 0) {
                     for (const item of lineage) {
@@ -2399,38 +2415,38 @@ if __name__ == '__main__':
                 } else {
                     lineageHtml = '<p>No data lineage defined yet. Use metadata_manager.define_lineage() to add lineage information.</p>';
                 }
-                
+
                 document.getElementById('dataLineage').innerHTML = lineageHtml;
-                
+
             } catch (error) {
                 console.error('Error loading lineage:', error);
                 document.getElementById('dataLineage').innerHTML = '<p>Error loading data lineage</p>';
             }
         }
-        
+
         // Run quality checks
         async function runQualityChecks() {
             const button = event.target;
             const originalText = button.textContent;
             button.disabled = true;
             button.textContent = 'Running...';
-            
+
             try {
                 const response = await fetch('/api/quality/run-checks', {
                     method: 'POST'
                 });
                 const result = await response.json();
-                
+
                 const message = `Quality check completed!\n\n` +
                               `✅ Passed: ${result.passed_checks}/${result.total_checks}\n` +
                               `❌ Failed: ${result.failed_checks}\n` +
                               `⚠️ Critical failures: ${result.critical_failures}`;
-                
+
                 showNotification(message, result.critical_failures > 0 ? 'warning' : 'success');
-                
+
                 // Refresh all data
                 await refreshAll();
-                
+
             } catch (error) {
                 console.error('Error running quality checks:', error);
                 showNotification('Error running quality checks. Make sure the server is running.', 'error');
@@ -2439,7 +2455,7 @@ if __name__ == '__main__':
                 button.textContent = originalText;
             }
         }
-        
+
         // Export metadata
         async function exportMetadata() {
             try {
@@ -2451,7 +2467,7 @@ if __name__ == '__main__':
                 showNotification('Error exporting metadata', 'error');
             }
         }
-        
+
         // Show notification
         function showNotification(message, type = 'info') {
             const colors = {
@@ -2460,7 +2476,7 @@ if __name__ == '__main__':
                 error: '#e74c3c',
                 info: '#667eea'
             };
-            
+
             const notification = document.createElement('div');
             notification.style.cssText = `
                 position: fixed;
@@ -2476,15 +2492,15 @@ if __name__ == '__main__':
                 max-width: 400px;
             `;
             notification.textContent = message;
-            
+
             document.body.appendChild(notification);
-            
+
             setTimeout(() => {
                 notification.style.opacity = '0';
                 setTimeout(() => notification.remove(), 300);
             }, 5000);
         }
-        
+
         // Add animation style
         const style = document.createElement('style');
         style.textContent = `
@@ -2500,14 +2516,14 @@ if __name__ == '__main__':
             }
         `;
         document.head.appendChild(style);
-        
+
         // Auto-refresh every 30 seconds if tab is visible
         setInterval(() => {
             if (document.visibilityState === 'visible') {
                 loadDashboardStats();
             }
         }, 30000);
-        
+
         // Initial load of all data
         refreshAll();
     </script>
@@ -2519,7 +2535,7 @@ if __name__ == '__main__':
 ```python
 # Features present:
 ✅ Multiple rule types (completeness, accuracy, consistency)
-✅ Severity levels (INFO, WARNING, CRITICAL)  
+✅ Severity levels (INFO, WARNING, CRITICAL)
 ✅ History tracking
 ✅ YAML configuration
 
