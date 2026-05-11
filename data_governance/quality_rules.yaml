@@ -1,0 +1,13 @@
+# data_governance/quality_rules.yaml
+quality_rules:
+  - name: completeness_player_name
+    description: "Player name should never be NULL or empty"
+    severity: critical
+    check_type: completeness
+    threshold: 0.95
+    active: true
+    query: |
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN player_name IS NULL OR player_name = 'Player' THEN 1 ELSE 0 END) as null_count
+      FROM scores

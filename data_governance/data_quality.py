@@ -98,13 +98,54 @@ class DataQualityChecker:
                     FROM scores
                 """,
                 threshold=0.95,  # 95% completeness required
-            )
+            ),
+            QualityRule(
+                name="valid_score_range",
+                description="Scores should be between 0 and 15",
+                severity=Severity.WARNING,
+                check_type="accuracy",
+                query="""
+                    SELECT COUNT(*) as total,
+                        SUM(CASE WHEN score < 0 OR score > 15 THEN 1 ELSE 0 END) as invalid_count
+                    FROM scores
+                """,
+                threshold=0.99,  # 0.99 scores in valid range
+            ),
+            QualityRule(
+                name="no_negative_scores",
+                description="Scores should never be negative",
+                severity=Severity.CRITICAL,
+                check_type="accuracy",
+                query="""
+                    SELECT COUNT(*) as total,
+                        SUM(CASE WHEN score < 0 THEN 1 ELSE 0 END) as negative_count
+                    FROM scores
+                """,
+                threshold=1.0,  # 100% scores should be non-negative
+            ),
         ]
         return rules
 
     def load_rules_from_yaml(self, yaml_path: str):
         """Load quality rules from YAML configuration"""
-        pass
+        import yaml
+
+        with open(yaml_path, "r") as f:
+            rules_config = yaml.safe_load(f)
+
+        self.rules = []
+        for rule_config in rules_config["quality_rules"]:
+            self.rules.append(
+                QualityRule(
+                    name=rule_config["name"],
+                    description=rule_config["description"],
+                    severity=Severity[rule_config["severity"].upper()],
+                    check_type=rule_config["check_type"],
+                    query=rule_config["query"],
+                    threshold=rule_config["threshold"],
+                    active=rule_config.get("active", True),
+                )
+            )
 
     def execute_rule(self, rule: QualityRule) -> QualityResult:
         """Execute a single quality rule"""
@@ -130,7 +171,10 @@ class DataQualityChecker:
                 passed = score >= rule.threshold
             else:
                 total = df.iloc[0]["total"]
-                invalid = df.iloc[0].get("null_count", 0)
+                invalid = df.iloc[0].get(
+                    "null_count",
+                    df.iloc[0].get("invalid_count", df.iloc[0].get("negative_count", 0)),
+                )
 
                 affected_rows = invalid if "invalid" in locals() else 0
                 valid = total - invalid if total > 0 else 0
